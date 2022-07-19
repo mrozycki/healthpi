@@ -1,7 +1,4 @@
-use btleplug::api::{
-    Central, CentralEvent, Characteristic, Manager as _, Peripheral, ScanFilter, WriteType,
-};
-use btleplug::platform::{Adapter, Manager};
+use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, WriteOptions, WriteType};
 use futures::StreamExt;
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -16,89 +13,82 @@ const WEIGHT_CUSTOM_A_CHARACTERISTIC: Uuid =
 const WEIGHT_CUSTOM_B_CHARACTERISTIC: Uuid =
     Uuid::from_u128(0x352e3004_28e9_40b8_a361_6db4cca4147c);
 const CMD_CHARACTERISTIC: Uuid = Uuid::from_u128(0x352e3002_28e9_40b8_a361_6db4cca4147c);
-
-const NOTIFY_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(0x6e400002_b534_f393_67a9_e50e24dccA9e);
+const CUSTOM_SERVICE_UUID: Uuid = Uuid::from_u128(0x352e3000_28e9_40b8_a361_6db4cca4147c);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let manager = Manager::new().await?;
-    let adapter_list = manager.adapters().await?;
-    let adapter = adapter_list.get(0).expect("No Bluetooth adapters found");
-
-    println!("Listening...");
-    adapter
-        .start_scan(ScanFilter::default())
-        .await
-        .expect("Can't scan BLE adapter for connected devices...");
+    let (_, session) = BluetoothSession::new().await?;
 
     loop {
+        println!("Listening...");
+        session.start_discovery().await?;
+        println!("Started discovery...");
         time::sleep(Duration::from_millis(1000)).await;
-        let peripherals = adapter.peripherals().await?;
-        if peripherals.is_empty() {
-            continue;
-        }
+        session.stop_discovery().await?;
+        println!("Discovery done");
 
-        for peripheral in peripherals.iter() {
-            let properties = peripheral.properties().await?.unwrap();
-            let local_name = properties.local_name.clone().unwrap_or_default();
-            if !local_name.contains(PERIPHERAL_NAME_MATCH_FILTER) {
-                continue;
-            }
-            println!("Found peripheral, connecting...");
+        let devices = session.get_devices().await?;
 
-            peripheral.connect().await?;
-            println!("Connected to peripheral");
+        if let Some(scale) = devices
+            .into_iter()
+            .find(|device| device.name.as_deref() == Some(PERIPHERAL_NAME_MATCH_FILTER))
+        {
+            println!("Connecting to peripheral");
+            session.connect(&scale.id).await?;
+            println!("Connected");
 
-            peripheral.discover_services().await?;
-            println!("Discovered services");
-            let weight_characteristic_a = peripheral
-                .characteristics()
-                .into_iter()
-                .find(|ch| ch.uuid == WEIGHT_CUSTOM_A_CHARACTERISTIC)
-                .expect("Expected to find the weight characteristic");
-            let weight_characteristic_b = peripheral
-                .characteristics()
-                .into_iter()
-                .find(|ch| ch.uuid == WEIGHT_CUSTOM_B_CHARACTERISTIC)
-                .expect("Expected to find the weight characteristic");
-
-            println!("Found weight characteristics, subscribing...");
-            peripheral.subscribe(&weight_characteristic_a).await?;
-            peripheral.subscribe(&weight_characteristic_b).await?;
-            println!("Subscribed to weight characteristics, awaiting notifications...");
-
-            let cmd_characteristic = peripheral
-                .characteristics()
-                .into_iter()
-                .find(|ch| ch.uuid == CMD_CHARACTERISTIC)
-                .expect("Expected to find the cmd characteristic");
-            peripheral
-                .write(&cmd_characteristic, &[0x09, 1], WriteType::WithResponse)
+            let weight_service = session
+                .get_service_by_uuid(&scale.id, CUSTOM_SERVICE_UUID)
+                .await?;
+            let characteristics = session.get_characteristics(&weight_service.id).await?;
+            let weight_characteristic_a = session
+                .get_characteristic_by_uuid(&weight_service.id, WEIGHT_CUSTOM_A_CHARACTERISTIC)
+                .await?;
+            let weight_characteristic_b = session
+                .get_characteristic_by_uuid(&weight_service.id, WEIGHT_CUSTOM_B_CHARACTERISTIC)
                 .await?;
 
-            let mut notifications = peripheral.notifications().await?;
-            while let Some(data) = notifications.next().await {
-                if data.value.len() == 15 {
-                    let year = (data.value[2] as usize) * 256 + (data.value[3] as usize);
-                    let month = data.value[4];
-                    let day = data.value[5];
-                    let weight = ((data.value[9] as f64) * 256.0 + (data.value[10] as f64)) / 10.0;
-                    /*println!(
-                        "Received data from {:?}: {}-{:02}-{:02}, {} kg",
-                        local_name, year, month, day, weight
-                    );*/
-                    println!("Received data from {:?}: {:?}", local_name, data.value);
-                } else {
-                    println!("Received data from {:?}: {:?}", local_name, data.value);
+            let cmd_characteristic = session
+                .get_characteristic_by_uuid(&weight_service.id, CMD_CHARACTERISTIC)
+                .await?;
+            session
+                .write_characteristic_value_with_options(
+                    &cmd_characteristic.id,
+                    vec![0x09, 1],
+                    WriteOptions {
+                        offset: 0,
+                        write_type: Some(WriteType::WithResponse),
+                    },
+                )
+                .await?;
+
+            let mut events = session
+                .characteristic_event_stream(&weight_characteristic_a.id)
+                .await?;
+            session.start_notify(&weight_characteristic_a.id).await?;
+
+            while let Some(bt_event) = events.next().await {
+                if let BluetoothEvent::Characteristic {
+                    id,
+                    event: CharacteristicEvent::Value { value },
+                } = bt_event
+                {
+                    if value.len() == 15 {
+                        let year = (value[2] as usize) * 256 + (value[3] as usize);
+                        let month = value[4];
+                        let day = value[5];
+                        let weight = ((value[9] as f64) * 256.0 + (value[10] as f64)) / 10.0;
+                        println!(
+                            "Received data from: {}-{:02}-{:02}, {} kg",
+                            year, month, day, weight
+                        );
+                    }
                 }
             }
 
-            println!("Disconnecting from peripheral");
-            peripheral.disconnect().await?;
             return Ok(());
         }
     }
-    // Ok(())
 }
 
 /*
@@ -135,6 +125,7 @@ Characteristic { uuid: 00002a9c-0000-1000-8000-00805f9b34fb, service_uuid: 00001
 Characteristic { uuid: 00002a9d-0000-1000-8000-00805f9b34fb, service_uuid: 0000181d-0000-1000-8000-00805f9b34fb, properties: INDICATE }
 */
 
+/*
 async fn track_mi_scale(adapter: &Adapter) -> Result<(), Box<dyn Error>> {
     println!("Listening...");
     let mut events = adapter.events().await?;
@@ -174,3 +165,4 @@ async fn track_mi_scale(adapter: &Adapter) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+*/
