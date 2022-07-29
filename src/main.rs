@@ -6,10 +6,9 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time;
 
-use crate::devices::device::Device;
-use crate::devices::soehnle::Shape200;
+use crate::devices::{contour, device::Device};
 
-const PERIPHERAL_NAME_MATCH_FILTER: &str = "Shape200";
+const PERIPHERAL_NAME_MATCH_FILTER: &str = "Contour";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -23,17 +22,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let devices = session.get_devices().await?;
 
-        if let Some(scale) = devices
+        if let Some(glucometer) = devices
             .into_iter()
-            .find(|device| device.name.as_deref() == Some(PERIPHERAL_NAME_MATCH_FILTER))
-            .map(|info| Shape200::new(info.id))
+            .find(|device| {
+                device
+                    .name
+                    .as_deref()
+                    .filter(|name| name.contains(PERIPHERAL_NAME_MATCH_FILTER))
+                    .is_some()
+            })
+            .map(|info| contour::ElitePlus::new(info.id))
         {
-            println!("Connecting to peripheral");
-            scale.connect(&session).await?;
+            println!("Found device");
+            glucometer.connect(&session).await?;
             println!("Connected");
 
-            let data = scale.get_data(&session).await?;
-            println!("Received data: {:?}", data);
+            println!("Getting data");
+            let data = glucometer.get_data(&session).await?;
+            println!("Fetched: {:?}", data);
 
             return Ok(());
         }

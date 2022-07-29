@@ -7,6 +7,7 @@ pub enum Value {
     WaterPercent(f64),
     MusclePercent(f64),
     FatPercent(f64),
+    Glucose(i32),
 }
 
 #[derive(Debug)]
