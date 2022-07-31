@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{error::Error, time::Duration};
 
 use async_trait::async_trait;
 use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceId};
@@ -29,8 +29,18 @@ impl ElitePlus {
 
 #[async_trait]
 impl Device for ElitePlus {
-    async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn std::error::Error>> {
-        session.connect(&self.device_id).await?;
+    async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>> {
+        session
+            .connect_with_timeout(&self.device_id, Duration::from_secs(1))
+            .await?;
+        Ok(())
+    }
+
+    async fn disconnect(
+        &self,
+        session: &BluetoothSession,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        session.disconnect(&self.device_id).await?;
         Ok(())
     }
 

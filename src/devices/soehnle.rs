@@ -34,6 +34,14 @@ impl Device for Shape200 {
         Ok(())
     }
 
+    async fn disconnect(
+        &self,
+        session: &BluetoothSession,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        session.disconnect(&self.device_id).await?;
+        Ok(())
+    }
+
     async fn get_data(
         &self,
         session: &BluetoothSession,
