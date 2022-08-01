@@ -1,0 +1,23 @@
+appenders:
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {h({l})} {t}: {m}{n}"
+
+  application:
+    kind: file
+    path: "log/application.log"
+    filters:
+      - kind: threshold
+        level: info
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {h({l})} {t}: {m}{n}"
+
+root:
+  appenders:
+    - stdout
+    - application
+
+loggers:
+  serde_xml_rs::de:
+    level: error
