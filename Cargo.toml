@@ -10,5 +10,7 @@ async-trait = "0.1.56"
 bluez-async = "0.6.0"
 chrono = "0.4.19"
 futures = "0.3.21"
+log = "0.4.17"
+log4rs = "1.1.1"
 tokio = { version = "1.17.0", features = ["macros", "rt", "rt-multi-thread"] }
 uuid = "1.1.2"
