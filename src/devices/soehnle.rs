@@ -10,6 +10,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::store::measurement::{Record, Value};
+use crate::store::user::User;
 
 use super::device::Device;
 
@@ -59,6 +60,43 @@ impl Device for Shape200 {
         let cmd_characteristic = session
             .get_characteristic_by_uuid(&weight_service.id, CMD_CHARACTERISTIC)
             .await?;
+
+        let mut events = session
+            .characteristic_event_stream(&weight_characteristic.id)
+            .await?;
+        session.start_notify(&weight_characteristic.id).await?;
+        session
+            .write_characteristic_value_with_options(
+                &cmd_characteristic.id,
+                vec![0x0c, 1],
+                WriteOptions {
+                    offset: 0,
+                    write_type: Some(WriteType::WithResponse),
+                },
+            )
+            .await?;
+
+        let mut records = Vec::new();
+
+        let user = if let Some(bt_event) = events.next().await {
+            if let BluetoothEvent::Characteristic {
+                event: CharacteristicEvent::Value { value },
+                ..
+            } = bt_event
+            {
+                User::new(
+                    value[3],
+                    value[4] != 0,
+                    u16::from_be_bytes([value[5], value[6]]),
+                    value[9],
+                )
+            } else {
+                panic!("Wrong data received!")
+            }
+        } else {
+            panic!("Did not receive user data!")
+        };
+
         session
             .write_characteristic_value_with_options(
                 &cmd_characteristic.id,
@@ -69,34 +107,95 @@ impl Device for Shape200 {
                 },
             )
             .await?;
-
-        let mut events = session
-            .characteristic_event_stream(&weight_characteristic.id)
-            .await?;
-        session.start_notify(&weight_characteristic.id).await?;
-
-        let mut records = Vec::new();
-        while let Ok(Some(bt_event)) = timeout(Duration::from_millis(100), events.next()).await {
+        while let Ok(Some(bt_event)) = timeout(Duration::from_millis(1000), events.next()).await {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
                 ..
             } = bt_event
             {
                 if value.len() == 15 {
-                    let year = (value[2] as i32) * 256 + (value[3] as i32);
-                    let date = NaiveDate::from_ymd(year, value[4] as u32, value[5] as u32);
+                    let year = u16::from_be_bytes([value[2], value[3]]);
+                    let date = NaiveDate::from_ymd(year as i32, value[4] as u32, value[5] as u32);
                     let time =
                         NaiveTime::from_hms(value[6] as u32, value[7] as u32, value[8] as u32);
 
-                    let weight = ((value[9] as f64) * 256.0 + (value[10] as f64)) / 10.0;
-                    records.push(Record::with_values(
-                        NaiveDateTime::new(date, time),
-                        vec![Value::Weight(weight)],
-                    ))
+                    let weight = u16::from_be_bytes([value[9], value[10]]) as f64 / 10.0;
+                    let mut values = vec![Value::Weight(weight)];
+                    let imp5 = u16::from_be_bytes([value[11], value[12]]);
+                    let imp50 = u16::from_be_bytes([value[13], value[14]]);
+                    if imp50 > 0 {
+                        let fat_percentage = get_fat_percentage(&user, weight, imp50 as f64);
+                        let water_percentage = get_water_percentage(&user, weight, imp50 as f64);
+                        let muscle_percentage =
+                            get_muscle_percentage(&user, weight, imp5 as f64, imp50 as f64);
+                        values.append(&mut vec![
+                            Value::FatPercent(fat_percentage),
+                            Value::WaterPercent(water_percentage),
+                            Value::MusclePercent(muscle_percentage),
+                        ]);
+                    }
+
+                    records.push(Record::with_values(NaiveDateTime::new(date, time), values))
                 }
             }
         }
 
         Ok(records)
     }
+}
+
+fn get_water_percentage(user: &User, weight: f64, imp50: f64) -> f64 {
+    let activity_correction_factor = match (user.activity_level(), user.is_female()) {
+        (1..=3, true) => 0.0,
+        (1..=3, false) => 2.83,
+        (4, true) => 0.4,
+        (4, false) => 3.93,
+        (5, true) => 1.4,
+        (5, false) => 5.33,
+        _ => 0.0,
+    };
+
+    (0.3674 * (user.height() as f64).powf(2.0) / imp50 + 0.17530 * weight
+        - 0.11 * user.age() as f64
+        + (6.53 + activity_correction_factor))
+        / weight
+        * 100.0
+}
+
+fn get_muscle_percentage(user: &User, weight: f64, imp5: f64, imp50: f64) -> f64 {
+    let activity_correction_factor = match (user.activity_level(), user.is_female()) {
+        (1..=3, true) => 0.0,
+        (1..=3, false) => 3.6224,
+        (4, true) => 0.0,
+        (4, false) => 4.3904,
+        (5, true) => 1.664,
+        (5, false) => 5.4144,
+        _ => 0.0,
+    };
+    ((0.47027 / imp50 - 0.24196 / imp5) * (user.height() as f64).powf(2.0) + 0.13796 * weight
+        - 0.1152 * user.age() as f64
+        + (5.12 + activity_correction_factor))
+        / weight
+        * 100.0
+}
+
+fn get_fat_percentage(user: &User, weight: f64, imp50: f64) -> f64 {
+    let activity_correction_factor = match (user.activity_level(), user.is_female()) {
+        (4, true) => 2.3,
+        (4, false) => 2.5,
+        (5, true) => 4.1,
+        (5, false) => 4.3,
+        _ => 0.0,
+    };
+
+    let (sex_correction_factor, activity_sex_div) = if user.is_female() {
+        (0.214, 55.1)
+    } else {
+        (0.250, 65.5)
+    };
+
+    1.847 * weight * 10000.0 / ((user.height() as f64).powf(2.0))
+        + sex_correction_factor * user.age() as f64
+        + 0.062 * imp50
+        - (activity_sex_div - activity_correction_factor)
 }
