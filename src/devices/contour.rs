@@ -30,9 +30,7 @@ impl ElitePlus {
 #[async_trait]
 impl Device for ElitePlus {
     async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>> {
-        session
-            .connect_with_timeout(&self.device_info.id, Duration::from_secs(1))
-            .await?;
+        session.connect(&self.device_info.id).await?;
         Ok(())
     }
 

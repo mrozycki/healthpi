@@ -15,7 +15,9 @@ pub trait Device {
 }
 
 pub fn make_device(device_info: DeviceInfo) -> Option<Box<dyn Device>> {
-    if let Some(name) = &device_info.name {
+    if device_info.rssi.is_none() {
+        None
+    } else if let Some(name) = &device_info.name {
         if name.contains("Contour") {
             Some(Box::new(contour::ElitePlus::new(device_info)))
         } else if name.contains("Shape200") {
