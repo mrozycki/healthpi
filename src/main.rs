@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let backoff_expiry = chrono::Utc::now()
                         .checked_add_signed(chrono::Duration::minutes(5))
                         .unwrap();
-                    debug!(
+                    info!(
                         "Ignoring device {} until {}",
                         display_device(device.as_ref()),
                         backoff_expiry
