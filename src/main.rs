@@ -21,16 +21,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut devices = session.get_devices().await?.into_iter();
 
         while let Some(device) = devices.next().and_then(make_device) {
-            println!("Found device");
+            println!("Found device, connecting");
             if let Err(_) = device.connect(&session).await {
                 eprintln!("Failed to connect, skipping");
                 continue;
             }
-            println!("Connected");
 
             println!("Getting data");
             let data = device.get_data(&session).await?;
-            println!("Fetched {} records, last: {:?}", data.len(), data.last());
+            println!(
+                "Fetched {} records, last 5: {:?}",
+                data.len(),
+                data.iter().rev().take(5).collect::<Vec<_>>()
+            );
 
             device.disconnect(&session).await?;
         }

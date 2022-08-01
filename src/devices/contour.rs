@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{collections::BTreeMap, error::Error, time::Duration};
 
 use async_trait::async_trait;
 use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceId};
@@ -7,7 +7,7 @@ use futures::StreamExt;
 use tokio::time::timeout;
 use uuid::Uuid;
 
-use crate::store::measurement::{Record, Value};
+use crate::store::measurement::{MealIndicator, Record, Value};
 
 use super::device::Device;
 
@@ -31,7 +31,8 @@ impl ElitePlus {
 impl Device for ElitePlus {
     async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>> {
         session
-            .connect_with_timeout(&self.device_id, Duration::from_secs(1))
+            // .connect_with_timeout(&self.device_id, Duration::from_secs(1))
+            .connect(&self.device_id)
             .await?;
         Ok(())
     }
@@ -48,21 +49,21 @@ impl Device for ElitePlus {
         &self,
         session: &BluetoothSession,
     ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
-        let glucose_characteristic = session
+        let measurements = session
             .get_service_characteristic_by_uuid(
                 &self.device_id,
                 GLUCOSE_SERVICE,
                 GLUCOSE_CHARACTERISTIC,
             )
             .await?;
-        let glucose_measurement_context_characteristic = session
+        let contexts = session
             .get_service_characteristic_by_uuid(
                 &self.device_id,
                 GLUCOSE_SERVICE,
                 GLUCOSE_MEASUREMENT_CONTEXT_CHARACTERISTIC,
             )
             .await?;
-        let racp_characteristic = session
+        let racp = session
             .get_service_characteristic_by_uuid(
                 &self.device_id,
                 GLUCOSE_SERVICE,
@@ -70,38 +71,66 @@ impl Device for ElitePlus {
             )
             .await?;
 
-        let mut events = session.event_stream().await?;
-        session.start_notify(&glucose_characteristic.id).await?;
-        session
-            .start_notify(&glucose_measurement_context_characteristic.id)
+        let mut measurement_events = session
+            .characteristic_event_stream(&measurements.id)
             .await?;
-        session.start_notify(&racp_characteristic.id).await?;
+        session.start_notify(&measurements.id).await?;
+        let mut context_events = session.characteristic_event_stream(&contexts.id).await?;
+        session.start_notify(&contexts.id).await?;
+        session.start_notify(&racp.id).await?;
 
         session
-            .write_characteristic_value(&racp_characteristic.id, vec![1, 1])
+            .write_characteristic_value(&racp.id, vec![1, 3, 1, 38, 2])
             .await?;
 
-        let mut records = Vec::new();
-        while let Ok(Some(bt_event)) = timeout(Duration::from_millis(1000), events.next()).await {
+        let mut records = BTreeMap::<u16, Record>::new();
+        while let Ok(Some(bt_event)) =
+            timeout(Duration::from_secs(1), measurement_events.next()).await
+        {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
                 ..
             } = bt_event
             {
-                if value.len() == 15 {
-                    let year = (value[4] as i32) * 256 + (value[3] as i32);
-                    let date = NaiveDate::from_ymd(year, value[5] as u32, value[6] as u32);
-                    let time =
-                        NaiveTime::from_hms(value[7] as u32, value[8] as u32, value[9] as u32);
+                let sequence_number = u16::from_be_bytes([value[2], value[1]]);
+                let year = u16::from_be_bytes([value[4], value[3]]);
+                let date = NaiveDate::from_ymd(year as i32, value[5] as u32, value[6] as u32);
+                let time = NaiveTime::from_hms(value[7] as u32, value[8] as u32, value[9] as u32);
 
-                    let glucose = (value[11] as i32) * 256 + (value[12] as i32);
-                    records.push(Record::with_values(
+                let glucose = u16::from_be_bytes([value[11], value[12]]);
+                records.insert(
+                    sequence_number,
+                    Record::with_values(
                         NaiveDateTime::new(date, time),
-                        vec![Value::Glucose(glucose)],
-                    ));
+                        vec![Value::Glucose(glucose as i32)],
+                    ),
+                );
+            }
+        }
+
+        while let Ok(Some(bt_event)) = timeout(Duration::from_secs(1), context_events.next()).await
+        {
+            if let BluetoothEvent::Characteristic {
+                event: CharacteristicEvent::Value { value },
+                ..
+            } = bt_event
+            {
+                let sequence_number = u16::from_be_bytes([value[2], value[1]]);
+                let flags_field = value[0];
+                let meal_field_index = 3 + (flags_field >> 7 & 1) + 2 * (flags_field & 1);
+                if (flags_field >> 1 & 1) > 0 {
+                    let meal = match value[meal_field_index as usize] {
+                        1 => MealIndicator::BeforeMeal,
+                        2 => MealIndicator::AfterMeal,
+                        3 => MealIndicator::NoMeal,
+                        _ => MealIndicator::NoIndication,
+                    };
+                    if let Some(record) = records.get_mut(&sequence_number) {
+                        record.add_value(Value::Meal(meal))
+                    }
                 }
             }
         }
-        Ok(records)
+        Ok(records.into_values().collect())
     }
 }
