@@ -11,14 +11,15 @@ pub trait Device {
     async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>>;
     async fn disconnect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>>;
     async fn get_data(&self, session: &BluetoothSession) -> Result<Vec<Record>, Box<dyn Error>>;
+    fn get_device_info(&self) -> &DeviceInfo;
 }
 
 pub fn make_device(device_info: DeviceInfo) -> Option<Box<dyn Device>> {
     if let Some(name) = &device_info.name {
         if name.contains("Contour") {
-            Some(Box::new(contour::ElitePlus::new(device_info.id)))
+            Some(Box::new(contour::ElitePlus::new(device_info)))
         } else if name.contains("Shape200") {
-            Some(Box::new(soehnle::Shape200::new(device_info.id)))
+            Some(Box::new(soehnle::Shape200::new(device_info)))
         } else {
             None
         }

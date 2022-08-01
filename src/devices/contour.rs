@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, error::Error, time::Duration};
 
 use async_trait::async_trait;
-use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceId};
+use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
 use tokio::time::timeout;
@@ -18,12 +18,12 @@ const GLUCOSE_MEASUREMENT_CONTEXT_CHARACTERISTIC: Uuid =
 const RACP_CHARACTERISTIC: Uuid = Uuid::from_u128(0x00002a52_0000_1000_8000_00805f9b34fb);
 
 pub struct ElitePlus {
-    device_id: DeviceId,
+    device_info: DeviceInfo,
 }
 
 impl ElitePlus {
-    pub fn new(device_id: DeviceId) -> Self {
-        Self { device_id }
+    pub fn new(device_info: DeviceInfo) -> Self {
+        Self { device_info }
     }
 }
 
@@ -31,8 +31,7 @@ impl ElitePlus {
 impl Device for ElitePlus {
     async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>> {
         session
-            // .connect_with_timeout(&self.device_id, Duration::from_secs(1))
-            .connect(&self.device_id)
+            .connect_with_timeout(&self.device_info.id, Duration::from_secs(1))
             .await?;
         Ok(())
     }
@@ -41,8 +40,12 @@ impl Device for ElitePlus {
         &self,
         session: &BluetoothSession,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        session.disconnect(&self.device_id).await?;
+        session.disconnect(&self.device_info.id).await?;
         Ok(())
+    }
+
+    fn get_device_info(&self) -> &DeviceInfo {
+        &self.device_info
     }
 
     async fn get_data(
@@ -51,21 +54,21 @@ impl Device for ElitePlus {
     ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
         let measurements = session
             .get_service_characteristic_by_uuid(
-                &self.device_id,
+                &self.device_info.id,
                 GLUCOSE_SERVICE,
                 GLUCOSE_CHARACTERISTIC,
             )
             .await?;
         let contexts = session
             .get_service_characteristic_by_uuid(
-                &self.device_id,
+                &self.device_info.id,
                 GLUCOSE_SERVICE,
                 GLUCOSE_MEASUREMENT_CONTEXT_CHARACTERISTIC,
             )
             .await?;
         let racp = session
             .get_service_characteristic_by_uuid(
-                &self.device_id,
+                &self.device_info.id,
                 GLUCOSE_SERVICE,
                 RACP_CHARACTERISTIC,
             )

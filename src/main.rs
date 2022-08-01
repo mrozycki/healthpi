@@ -21,7 +21,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut devices = session.get_devices().await?.into_iter();
 
         while let Some(device) = devices.next().and_then(make_device) {
-            println!("Found device, connecting");
+            println!(
+                "Found device {}, connecting",
+                device
+                    .get_device_info()
+                    .name
+                    .as_ref()
+                    .unwrap_or(&device.get_device_info().mac_address.to_string())
+            );
             if let Err(_) = device.connect(&session).await {
                 eprintln!("Failed to connect, skipping");
                 continue;

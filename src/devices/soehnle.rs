@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bluez_async::{
-    BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceId, WriteOptions, WriteType,
+    BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo, WriteOptions, WriteType,
 };
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
@@ -18,19 +18,19 @@ const CMD_CHARACTERISTIC: Uuid = Uuid::from_u128(0x352e3002_28e9_40b8_a361_6db4c
 const CUSTOM_SERVICE_UUID: Uuid = Uuid::from_u128(0x352e3000_28e9_40b8_a361_6db4cca4147c);
 
 pub struct Shape200 {
-    device_id: DeviceId,
+    device_info: DeviceInfo,
 }
 
 impl Shape200 {
-    pub fn new(device_id: DeviceId) -> Self {
-        Self { device_id }
+    pub fn new(device_info: DeviceInfo) -> Self {
+        Self { device_info }
     }
 }
 
 #[async_trait]
 impl Device for Shape200 {
     async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn std::error::Error>> {
-        session.connect(&self.device_id).await?;
+        session.connect(&self.device_info.id).await?;
         Ok(())
     }
 
@@ -38,8 +38,12 @@ impl Device for Shape200 {
         &self,
         session: &BluetoothSession,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        session.disconnect(&self.device_id).await?;
+        session.disconnect(&self.device_info.id).await?;
         Ok(())
+    }
+
+    fn get_device_info(&self) -> &DeviceInfo {
+        &self.device_info
     }
 
     async fn get_data(
@@ -47,7 +51,7 @@ impl Device for Shape200 {
         session: &BluetoothSession,
     ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
         let weight_service = session
-            .get_service_by_uuid(&self.device_id, CUSTOM_SERVICE_UUID)
+            .get_service_by_uuid(&self.device_info.id, CUSTOM_SERVICE_UUID)
             .await?;
         let weight_characteristic = session
             .get_characteristic_by_uuid(&weight_service.id, WEIGHT_CUSTOM_CHARACTERISTIC)
