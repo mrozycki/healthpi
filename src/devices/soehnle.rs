@@ -6,6 +6,7 @@ use bluez_async::{
 };
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
+use log::debug;
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -17,6 +18,8 @@ use super::device::Device;
 const WEIGHT_CUSTOM_CHARACTERISTIC: Uuid = Uuid::from_u128(0x352e3001_28e9_40b8_a361_6db4cca4147c);
 const CMD_CHARACTERISTIC: Uuid = Uuid::from_u128(0x352e3002_28e9_40b8_a361_6db4cca4147c);
 const CUSTOM_SERVICE_UUID: Uuid = Uuid::from_u128(0x352e3000_28e9_40b8_a361_6db4cca4147c);
+const BLOOD_PRESSURE_SERVICE: Uuid = Uuid::from_u128(0x00001810_0000_1000_8000_00805f9b34fb);
+const BLOOD_PRESSURE_CHARACTERISTIC: Uuid = Uuid::from_u128(0x00002a35_0000_1000_8000_00805f9b34fb);
 
 pub struct Shape200 {
     device_info: DeviceInfo,
@@ -198,4 +201,91 @@ fn get_fat_percentage(user: &User, weight: f64, imp50: f64) -> f64 {
         + sex_correction_factor * user.age() as f64
         + 0.062 * imp50
         - (activity_sex_div - activity_correction_factor)
+}
+
+pub struct SystoMC400 {
+    device_info: DeviceInfo,
+}
+
+impl SystoMC400 {
+    pub fn new(device_info: DeviceInfo) -> Self {
+        Self { device_info }
+    }
+}
+
+#[async_trait]
+impl Device for SystoMC400 {
+    async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn std::error::Error>> {
+        session.connect(&self.device_info.id).await?;
+        Ok(())
+    }
+
+    async fn disconnect(
+        &self,
+        session: &BluetoothSession,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        session.disconnect(&self.device_info.id).await?;
+        Ok(())
+    }
+
+    async fn get_data(
+        &self,
+        session: &BluetoothSession,
+    ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
+        debug!("Getting measurements characteristic");
+        let measurements = session
+            .get_service_characteristic_by_uuid(
+                &self.device_info.id,
+                BLOOD_PRESSURE_SERVICE,
+                BLOOD_PRESSURE_CHARACTERISTIC,
+            )
+            .await?;
+        debug!("Got: {:?}", &measurements.id);
+
+        debug!("Listening for events");
+        let mut events = session
+            .characteristic_event_stream(&measurements.id)
+            .await?;
+        session.start_notify(&measurements.id).await?;
+
+        let mut records = Vec::new();
+
+        debug!("Waiting for events");
+        while let Ok(Some(bt_event)) = timeout(Duration::from_millis(5000), events.next()).await {
+            if let BluetoothEvent::Characteristic {
+                event: CharacteristicEvent::Value { value },
+                ..
+            } = bt_event
+            {
+                debug!("Received characteristic event: {:?}", value);
+                let systolic = u16::from_be_bytes([value[2], value[1]]);
+                let diastolic = u16::from_be_bytes([value[4], value[3]]);
+                let heart_rate = u16::from_be_bytes([value[15], value[14]]);
+
+                let year = u16::from_be_bytes([value[8], value[7]]);
+                let date = NaiveDate::from_ymd(year as i32, value[9] as u32, value[10] as u32);
+                let time =
+                    NaiveTime::from_hms(value[11] as u32, value[12] as u32, value[13] as u32);
+                let timestamp = NaiveDateTime::new(date, time);
+
+                records.push(Record::with_values(
+                    timestamp,
+                    vec![
+                        Value::BloodPressureSystolic(systolic as i32),
+                        Value::BloodPressureDiastolic(diastolic as i32),
+                        Value::HeartRate(heart_rate as i32),
+                    ],
+                ))
+            } else {
+                debug!("Received unexpected type of event");
+            }
+        }
+        debug!("Processed all events, produced {} records", records.len());
+
+        Ok(records)
+    }
+
+    fn get_device_info(&self) -> &DeviceInfo {
+        &self.device_info
+    }
 }
