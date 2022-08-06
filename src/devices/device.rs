@@ -22,6 +22,8 @@ pub fn make_device(device_info: DeviceInfo) -> Option<Box<dyn Device>> {
             Some(Box::new(contour::ElitePlus::new(device_info)))
         } else if name.contains("Shape200") {
             Some(Box::new(soehnle::Shape200::new(device_info)))
+        } else if name.contains("Systo MC 400") {
+            Some(Box::new(soehnle::SystoMC400::new(device_info)))
         } else {
             None
         }

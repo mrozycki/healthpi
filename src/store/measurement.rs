@@ -17,6 +17,9 @@ pub enum Value {
     FatPercent(f64),
     Glucose(i32),
     Meal(MealIndicator),
+    BloodPressureSystolic(i32),
+    BloodPressureDiastolic(i32),
+    HeartRate(i32),
 }
 
 #[derive(Debug)]
