@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use bluez_async::{
     BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo, WriteOptions, WriteType,
 };
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
 use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
 
+use crate::devices::utils;
 use crate::store::measurement::{Record, Value};
 use crate::store::user::User;
 
@@ -75,8 +75,8 @@ impl Device for Shape200 {
                 &cmd_characteristic.id,
                 vec![0x0c, 1],
                 WriteOptions {
-                    offset: 0,
                     write_type: Some(WriteType::WithResponse),
+                    ..Default::default()
                 },
             )
             .await?;
@@ -106,8 +106,8 @@ impl Device for Shape200 {
                 &cmd_characteristic.id,
                 vec![0x09, 1],
                 WriteOptions {
-                    offset: 0,
                     write_type: Some(WriteType::WithResponse),
+                    ..Default::default()
                 },
             )
             .await?;
@@ -121,33 +121,26 @@ impl Device for Shape200 {
             } = bt_event
             {
                 if value.len() == 15 {
-                    let year = u16::from_be_bytes([value[2], value[3]]);
-                    let date = NaiveDate::from_ymd(year as i32, value[4] as u32, value[5] as u32);
-                    let time =
-                        NaiveTime::from_hms(value[6] as u32, value[7] as u32, value[8] as u32);
+                    let timestamp = utils::naive_date_time_from_bytes(&value[2..9]);
 
                     let weight = u16::from_be_bytes([value[9], value[10]]) as f64 / 10.0;
                     let mut values = vec![
                         Value::Weight(weight),
-                        Value::BMI(get_bmi(&user, weight)),
-                        Value::BMR(get_bmr(&user, weight)),
+                        Value::BodyMassIndex(get_body_mass_index(&user, weight)),
+                        Value::BasalMetabolicRate(get_basal_metabolic_rate(&user, weight)),
                     ];
 
-                    let imp5 = u16::from_be_bytes([value[11], value[12]]);
-                    let imp50 = u16::from_be_bytes([value[13], value[14]]);
-                    if imp50 > 0 {
-                        let fat_percentage = get_fat_percentage(&user, weight, imp50 as f64);
-                        let water_percentage = get_water_percentage(&user, weight, imp50 as f64);
-                        let muscle_percentage =
-                            get_muscle_percentage(&user, weight, imp5 as f64, imp50 as f64);
+                    let imp5 = u16::from_be_bytes([value[11], value[12]]) as f64;
+                    let imp50 = u16::from_be_bytes([value[13], value[14]]) as f64;
+                    if imp50 > 0.0 {
                         values.append(&mut vec![
-                            Value::FatPercent(fat_percentage),
-                            Value::WaterPercent(water_percentage),
-                            Value::MusclePercent(muscle_percentage),
+                            Value::FatPercent(get_fat_percentage(&user, weight, imp50)),
+                            Value::WaterPercent(get_water_percentage(&user, weight, imp50)),
+                            Value::MusclePercent(get_muscle_percentage(&user, weight, imp5, imp50)),
                         ]);
                     }
 
-                    records.push(Record::with_values(NaiveDateTime::new(date, time), values))
+                    records.push(Record::with_values(timestamp, values))
                 }
             }
         }
@@ -168,7 +161,7 @@ fn get_water_percentage(user: &User, weight: f64, imp50: f64) -> f64 {
         _ => 0.0,
     };
 
-    (0.3674 * (user.height() as f64).powf(2.0) / imp50 + 0.17530 * weight
+    (0.3674 * (user.height_cm() as f64).powf(2.0) / imp50 + 0.17530 * weight
         - 0.11 * user.age() as f64
         + (6.53 + activity_correction_factor))
         / weight
@@ -185,7 +178,7 @@ fn get_muscle_percentage(user: &User, weight: f64, imp5: f64, imp50: f64) -> f64
         (5, false) => 5.4144,
         _ => 0.0,
     };
-    ((0.47027 / imp50 - 0.24196 / imp5) * (user.height() as f64).powf(2.0) + 0.13796 * weight
+    ((0.47027 / imp50 - 0.24196 / imp5) * (user.height_cm() as f64).powf(2.0) + 0.13796 * weight
         - 0.1152 * user.age() as f64
         + (5.12 + activity_correction_factor))
         / weight
@@ -207,21 +200,21 @@ fn get_fat_percentage(user: &User, weight: f64, imp50: f64) -> f64 {
         (0.250, 65.5)
     };
 
-    1.847 * weight * 10000.0 / ((user.height() as f64).powf(2.0))
+    1.847 * weight / user.height_m().powf(2.0)
         + sex_correction_factor * user.age() as f64
         + 0.062 * imp50
         - (activity_sex_div - activity_correction_factor)
 }
 
-fn get_bmi(user: &User, weight: f64) -> f64 {
-    weight / (user.height() as f64 / 100.0).powf(2.0)
+fn get_body_mass_index(user: &User, weight: f64) -> f64 {
+    weight / user.height_m().powf(2.0)
 }
 
-fn get_bmr(user: &User, weight: f64) -> f64 {
+fn get_basal_metabolic_rate(user: &User, weight: f64) -> f64 {
     if user.is_female() {
-        447.593 + 9.247 * weight + 3.098 * user.height() as f64 - 4.330 * user.age() as f64
+        447.593 + 9.247 * weight + 3.098 * user.height_cm() as f64 - 4.330 * user.age() as f64
     } else {
-        88.362 + 13.397 * weight + 4.799 * user.height() as f64 - 5.677 * user.age() as f64
+        88.362 + 13.397 * weight + 4.799 * user.height_cm() as f64 - 5.677 * user.age() as f64
     }
 }
 
@@ -278,6 +271,8 @@ impl Device for SystoMC400 {
                 ..
             } = bt_event
             {
+                let timestamp = utils::naive_date_time_from_bytes(&value[7..14]);
+
                 let systolic_raw = u16::from_be_bytes([value[2], value[1]]);
                 let diastolic_raw = u16::from_be_bytes([value[4], value[3]]);
                 let (systolic, diastolic) = if value[0] & 1 == 0 {
@@ -287,12 +282,6 @@ impl Device for SystoMC400 {
                 };
 
                 let heart_rate = u16::from_be_bytes([value[15], value[14]]);
-
-                let year = u16::from_be_bytes([value[8], value[7]]);
-                let date = NaiveDate::from_ymd(year as i32, value[9] as u32, value[10] as u32);
-                let time =
-                    NaiveTime::from_hms(value[11] as u32, value[12] as u32, value[13] as u32);
-                let timestamp = NaiveDateTime::new(date, time);
 
                 records.push(Record::with_values(
                     timestamp,

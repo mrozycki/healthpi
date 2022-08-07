@@ -2,13 +2,15 @@ use std::{collections::BTreeMap, error::Error, time::Duration};
 
 use async_trait::async_trait;
 use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo};
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
 use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
 
-use crate::store::measurement::{MealIndicator, Record, Value};
+use crate::{
+    devices::utils,
+    store::measurement::{MealIndicator, Record, Value},
+};
 
 use super::device::Device;
 
@@ -98,17 +100,12 @@ impl Device for ElitePlus {
             } = bt_event
             {
                 let sequence_number = u16::from_be_bytes([value[2], value[1]]);
-                let year = u16::from_be_bytes([value[4], value[3]]);
-                let date = NaiveDate::from_ymd(year as i32, value[5] as u32, value[6] as u32);
-                let time = NaiveTime::from_hms(value[7] as u32, value[8] as u32, value[9] as u32);
+                let timestamp = utils::naive_date_time_from_bytes(&value[3..10]);
 
                 let glucose = u16::from_be_bytes([value[11], value[12]]);
                 records.insert(
                     sequence_number,
-                    Record::with_values(
-                        NaiveDateTime::new(date, time),
-                        vec![Value::Glucose(glucose as i32)],
-                    ),
+                    Record::with_values(timestamp, vec![Value::Glucose(glucose as i32)]),
                 );
             }
         }

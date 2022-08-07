@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .start_discovery_with_filter(&DiscoveryFilter {
             transport: Some(Transport::Le),
             duplicate_data: Some(false),
-            ..DiscoveryFilter::default()
+            ..Default::default()
         })
         .await?;
 

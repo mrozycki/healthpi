@@ -21,8 +21,11 @@ impl User {
     pub fn is_female(&self) -> bool {
         self.is_female
     }
-    pub fn height(&self) -> u16 {
+    pub fn height_cm(&self) -> u16 {
         self.height
+    }
+    pub fn height_m(&self) -> f64 {
+        self.height as f64 / 100.0
     }
     pub fn activity_level(&self) -> u8 {
         self.activity_level
