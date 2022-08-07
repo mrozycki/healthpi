@@ -258,8 +258,14 @@ impl Device for SystoMC400 {
             } = bt_event
             {
                 debug!("Received characteristic event: {:?}", value);
-                let systolic = u16::from_be_bytes([value[2], value[1]]);
-                let diastolic = u16::from_be_bytes([value[4], value[3]]);
+                let systolic_raw = u16::from_be_bytes([value[2], value[1]]);
+                let diastolic_raw = u16::from_be_bytes([value[4], value[3]]);
+                let (systolic, diastolic) = if value[0] & 1 == 0 {
+                    (systolic_raw, diastolic_raw)
+                } else {
+                    (systolic_raw * 15 / 2, diastolic_raw * 15 / 2)
+                };
+
                 let heart_rate = u16::from_be_bytes([value[15], value[14]]);
 
                 let year = u16::from_be_bytes([value[8], value[7]]);
