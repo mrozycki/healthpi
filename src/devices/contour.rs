@@ -81,7 +81,7 @@ impl Device for ElitePlus {
         session.start_notify(&racp.id).await?;
 
         session
-            .write_characteristic_value(&racp.id, vec![1, 3, 1, 38, 2])
+            .write_characteristic_value(&racp.id, vec![1, 6])
             .await?;
 
         let mut records = BTreeMap::<u16, Record>::new();
