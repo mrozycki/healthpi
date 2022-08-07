@@ -12,6 +12,7 @@ pub enum MealIndicator {
 #[allow(dead_code)]
 pub enum Value {
     Weight(f64),
+    BMI(f64),
     WaterPercent(f64),
     MusclePercent(f64),
     FatPercent(f64),

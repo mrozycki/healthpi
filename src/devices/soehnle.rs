@@ -123,7 +123,9 @@ impl Device for Shape200 {
                         NaiveTime::from_hms(value[6] as u32, value[7] as u32, value[8] as u32);
 
                     let weight = u16::from_be_bytes([value[9], value[10]]) as f64 / 10.0;
-                    let mut values = vec![Value::Weight(weight)];
+                    let mut values =
+                        vec![Value::Weight(weight), Value::BMI(get_bmi(&user, weight))];
+
                     let imp5 = u16::from_be_bytes([value[11], value[12]]);
                     let imp50 = u16::from_be_bytes([value[13], value[14]]);
                     if imp50 > 0 {
@@ -201,6 +203,10 @@ fn get_fat_percentage(user: &User, weight: f64, imp50: f64) -> f64 {
         + sex_correction_factor * user.age() as f64
         + 0.062 * imp50
         - (activity_sex_div - activity_correction_factor)
+}
+
+fn get_bmi(user: &User, weight: f64) -> f64 {
+    weight / (user.height() as f64 / 100.0).powf(2.0)
 }
 
 pub struct SystoMC400 {
