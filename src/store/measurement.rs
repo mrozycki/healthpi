@@ -13,6 +13,7 @@ pub enum MealIndicator {
 pub enum Value {
     Weight(f64),
     BMI(f64),
+    BMR(f64),
     WaterPercent(f64),
     MusclePercent(f64),
     FatPercent(f64),
