@@ -6,7 +6,7 @@ use bluez_async::{
 };
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
-use log::debug;
+use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -54,6 +54,7 @@ impl Device for Shape200 {
         &self,
         session: &BluetoothSession,
     ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
+        info!("Finding appropriate characteristics");
         let weight_service = session
             .get_service_by_uuid(&self.device_info.id, CUSTOM_SERVICE_UUID)
             .await?;
@@ -64,6 +65,7 @@ impl Device for Shape200 {
             .get_characteristic_by_uuid(&weight_service.id, CMD_CHARACTERISTIC)
             .await?;
 
+        info!("Subscribing to notifications");
         let mut events = session
             .characteristic_event_stream(&weight_characteristic.id)
             .await?;
@@ -79,8 +81,7 @@ impl Device for Shape200 {
             )
             .await?;
 
-        let mut records = Vec::new();
-
+        info!("Reading user data");
         let user = if let Some(bt_event) = events.next().await {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
@@ -110,6 +111,9 @@ impl Device for Shape200 {
                 },
             )
             .await?;
+
+        info!("Processing measurement notifications");
+        let mut records = Vec::new();
         while let Ok(Some(bt_event)) = timeout(Duration::from_millis(1000), events.next()).await {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
@@ -147,6 +151,7 @@ impl Device for Shape200 {
                 }
             }
         }
+        debug!("Processed all events, produced {} records", records.len());
 
         Ok(records)
     }
@@ -249,7 +254,7 @@ impl Device for SystoMC400 {
         &self,
         session: &BluetoothSession,
     ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
-        debug!("Getting measurements characteristic");
+        info!("Finding appropriate characteristics");
         let measurements = session
             .get_service_characteristic_by_uuid(
                 &self.device_info.id,
@@ -259,22 +264,20 @@ impl Device for SystoMC400 {
             .await?;
         debug!("Got: {:?}", &measurements.id);
 
-        debug!("Listening for events");
+        info!("Subscribing to notifications");
         let mut events = session
             .characteristic_event_stream(&measurements.id)
             .await?;
         session.start_notify(&measurements.id).await?;
 
+        info!("Processing notifications");
         let mut records = Vec::new();
-
-        debug!("Waiting for events");
         while let Ok(Some(bt_event)) = timeout(Duration::from_millis(5000), events.next()).await {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
                 ..
             } = bt_event
             {
-                debug!("Received characteristic event: {:?}", value);
                 let systolic_raw = u16::from_be_bytes([value[2], value[1]]);
                 let diastolic_raw = u16::from_be_bytes([value[4], value[3]]);
                 let (systolic, diastolic) = if value[0] & 1 == 0 {
@@ -299,8 +302,6 @@ impl Device for SystoMC400 {
                         Value::HeartRate(heart_rate as i32),
                     ],
                 ))
-            } else {
-                debug!("Received unexpected type of event");
             }
         }
         debug!("Processed all events, produced {} records", records.len());

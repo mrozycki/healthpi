@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use bluez_async::{BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use futures::StreamExt;
+use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -50,6 +51,7 @@ impl Device for ElitePlus {
         &self,
         session: &BluetoothSession,
     ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
+        info!("Finding appropriate characteristics");
         let measurements = session
             .get_service_characteristic_by_uuid(
                 &self.device_info.id,
@@ -72,6 +74,7 @@ impl Device for ElitePlus {
             )
             .await?;
 
+        info!("Subscribing to notifications");
         let mut measurement_events = session
             .characteristic_event_stream(&measurements.id)
             .await?;
@@ -85,6 +88,7 @@ impl Device for ElitePlus {
             .await?;
 
         let mut records = BTreeMap::<u16, Record>::new();
+        info!("Processing measurement notifications");
         while let Ok(Some(bt_event)) =
             timeout(Duration::from_secs(1), measurement_events.next()).await
         {
@@ -109,6 +113,7 @@ impl Device for ElitePlus {
             }
         }
 
+        info!("Processing context notifications");
         while let Ok(Some(bt_event)) = timeout(Duration::from_secs(1), context_events.next()).await
         {
             if let BluetoothEvent::Characteristic {
@@ -132,6 +137,8 @@ impl Device for ElitePlus {
                 }
             }
         }
+        debug!("Processed all events, produced {} records", records.len());
+
         Ok(records.into_values().collect())
     }
 }
