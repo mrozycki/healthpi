@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     devices::utils,
-    store::measurement::{MealIndicator, Record, Value},
+    store::measurement::{MealIndicator, Record, Source, Value},
 };
 
 use super::device::Device;
@@ -105,7 +105,11 @@ impl Device for ElitePlus {
                 let glucose = u16::from_be_bytes([value[11], value[12]]);
                 records.insert(
                     sequence_number,
-                    Record::with_values(timestamp, vec![Value::Glucose(glucose as i32)]),
+                    Record::new(
+                        timestamp,
+                        vec![Value::Glucose(glucose as i32)],
+                        Source::Device(self.device_info.mac_address),
+                    ),
                 );
             }
         }

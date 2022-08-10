@@ -1,3 +1,4 @@
+use bluez_async::MacAddress;
 use chrono::NaiveDateTime;
 
 #[derive(Debug)]
@@ -25,15 +26,25 @@ pub enum Value {
 }
 
 #[derive(Debug)]
+pub enum Source {
+    Device(MacAddress),
+}
+
+#[derive(Debug)]
 #[allow(dead_code)]
 pub struct Record {
     timestamp: NaiveDateTime,
     values: Vec<Value>,
+    source: Source,
 }
 
 impl Record {
-    pub fn with_values(timestamp: NaiveDateTime, values: Vec<Value>) -> Self {
-        Self { timestamp, values }
+    pub fn new(timestamp: NaiveDateTime, values: Vec<Value>, source: Source) -> Self {
+        Self {
+            timestamp,
+            values,
+            source,
+        }
     }
 
     pub fn add_value(&mut self, value: Value) {

@@ -10,7 +10,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::devices::utils;
-use crate::store::measurement::{Record, Value};
+use crate::store::measurement::{Record, Source, Value};
 use crate::store::user::User;
 
 use super::device::Device;
@@ -140,7 +140,11 @@ impl Device for Shape200 {
                         ]);
                     }
 
-                    records.push(Record::with_values(timestamp, values))
+                    records.push(Record::new(
+                        timestamp,
+                        values,
+                        Source::Device(self.device_info.mac_address),
+                    ))
                 }
             }
         }
@@ -283,13 +287,14 @@ impl Device for SystoMC400 {
 
                 let heart_rate = u16::from_be_bytes([value[15], value[14]]);
 
-                records.push(Record::with_values(
+                records.push(Record::new(
                     timestamp,
                     vec![
                         Value::BloodPressureSystolic(systolic as i32),
                         Value::BloodPressureDiastolic(diastolic as i32),
                         Value::HeartRate(heart_rate as i32),
                     ],
+                    Source::Device(self.device_info.mac_address),
                 ))
             }
         }
