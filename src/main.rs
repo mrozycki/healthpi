@@ -6,11 +6,9 @@ use std::{collections::HashMap, error::Error};
 
 use bluez_async::{BluetoothSession, DeviceId, DiscoveryFilter, Transport};
 use chrono::{DateTime, Utc};
-use devices::device::Device;
+use devices::device::{Device, Factory};
 use log::{debug, error, info};
 use tokio::time;
-
-use crate::devices::device::make_device;
 
 fn display_device(device: &dyn Device) -> String {
     device
@@ -25,6 +23,7 @@ fn display_device(device: &dyn Device) -> String {
 async fn main() -> Result<(), Box<dyn Error>> {
     log4rs::init_file("log4rs.yml", Default::default())?;
     let (_, session) = BluetoothSession::new().await?;
+    let factory = Factory::from_file("devices.csv")?;
 
     info!("Starting discovery");
     session
@@ -43,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let mut devices = session.get_devices().await?.into_iter();
 
-        while let Some(device) = devices.next().and_then(make_device) {
+        while let Some(device) = devices.next().and_then(|x| factory.make_device(x)) {
             if backoff_table
                 .get(&device.get_device_info().id)
                 .filter(|expiry| expiry > &&chrono::Utc::now())
