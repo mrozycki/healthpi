@@ -86,7 +86,7 @@ impl Device for ElitePlus {
         session.start_notify(&racp.id).await?;
 
         session
-            .write_characteristic_value(&racp.id, vec![1, 6])
+            .write_characteristic_value(&racp.id, vec![1, 1])
             .await?;
 
         let mut records = BTreeMap::<u16, Record>::new();
@@ -100,7 +100,7 @@ impl Device for ElitePlus {
             } = bt_event
             {
                 let sequence_number = u16::from_be_bytes([value[2], value[1]]);
-                let timestamp = utils::naive_date_time_from_bytes(&value[3..10]);
+                let timestamp = utils::naive_date_time_from_le_bytes(&value[3..10]);
 
                 let glucose = u16::from_be_bytes([value[11], value[12]]);
                 records.insert(

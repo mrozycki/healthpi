@@ -121,7 +121,7 @@ impl Device for Shape200 {
             } = bt_event
             {
                 if value.len() == 15 {
-                    let timestamp = utils::naive_date_time_from_bytes(&value[2..9]);
+                    let timestamp = utils::naive_date_time_from_be_bytes(&value[2..9]);
 
                     let weight = u16::from_be_bytes([value[9], value[10]]) as f64 / 10.0;
                     let mut values = vec![
@@ -275,7 +275,7 @@ impl Device for SystoMC400 {
                 ..
             } = bt_event
             {
-                let timestamp = utils::naive_date_time_from_bytes(&value[7..14]);
+                let timestamp = utils::naive_date_time_from_le_bytes(&value[7..14]);
 
                 let systolic_raw = u16::from_be_bytes([value[2], value[1]]);
                 let diastolic_raw = u16::from_be_bytes([value[4], value[3]]);
