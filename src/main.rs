@@ -1,6 +1,8 @@
 mod devices;
 mod store;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, error::Error};
 
@@ -36,7 +38,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut backoff_table = HashMap::<DeviceId, DateTime<Utc>>::new();
 
-    loop {
+    let running = Arc::new(AtomicBool::new(true));
+    let running2 = running.clone();
+    ctrlc::set_handler(move || running2.store(false, Ordering::Relaxed))?;
+    while running.load(Ordering::Relaxed) {
         debug!("Waiting for devices...");
         time::sleep(Duration::from_secs(1)).await;
 
@@ -90,4 +95,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    info!("Received SIGINT, terminating...");
+    session.stop_discovery().await?;
+
+    Ok(())
 }
