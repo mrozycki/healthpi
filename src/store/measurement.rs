@@ -35,14 +35,21 @@ pub enum Source {
 pub struct Record {
     timestamp: NaiveDateTime,
     values: Vec<Value>,
+    raw_data: Vec<u8>,
     source: Source,
 }
 
 impl Record {
-    pub fn new(timestamp: NaiveDateTime, values: Vec<Value>, source: Source) -> Self {
+    pub fn new(
+        timestamp: NaiveDateTime,
+        values: Vec<Value>,
+        raw_data: Vec<u8>,
+        source: Source,
+    ) -> Self {
         Self {
             timestamp,
             values,
+            raw_data,
             source,
         }
     }

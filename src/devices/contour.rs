@@ -108,6 +108,7 @@ impl Device for ElitePlus {
                     Record::new(
                         timestamp,
                         vec![Value::Glucose(glucose as i32)],
+                        value,
                         Source::Device(self.device_info.mac_address),
                     ),
                 );

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use bluez_async::{
     BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo, WriteOptions, WriteType,
 };
+use chrono::Utc;
 use futures::StreamExt;
 use log::{debug, info};
 use tokio::time::timeout;
@@ -143,6 +144,7 @@ impl Device for Shape200 {
                     records.push(Record::new(
                         timestamp,
                         values,
+                        value,
                         Source::Device(self.device_info.mac_address),
                     ))
                 }
@@ -230,6 +232,44 @@ impl SystoMC400 {
     pub fn new(device_info: DeviceInfo) -> Self {
         Self { device_info }
     }
+
+    fn read_record(&self, raw_data: Vec<u8>) -> Record {
+        let mut i = 1;
+
+        let mut values = Vec::new();
+        let systolic_raw = u16::from_be_bytes([raw_data[i + 1], raw_data[i]]);
+        let diastolic_raw = u16::from_be_bytes([raw_data[i + 3], raw_data[i + 2]]);
+        let (systolic, diastolic) = if raw_data[0] & 1 == 0 {
+            (systolic_raw, diastolic_raw)
+        } else {
+            (systolic_raw * 15 / 2, diastolic_raw * 15 / 2)
+        };
+        values.append(&mut vec![
+            Value::BloodPressureSystolic(systolic as i32),
+            Value::BloodPressureDiastolic(diastolic as i32),
+        ]);
+        i += 6;
+
+        let timestamp = if raw_data[0] & 2 == 0 {
+            Utc::now().naive_local()
+        } else {
+            let t = utils::naive_date_time_from_le_bytes(&raw_data[i..i + 7]);
+            i += 7;
+            t
+        };
+
+        if raw_data[0] & 4 != 0 {
+            let heart_rate = u16::from_be_bytes([raw_data[i + 1], raw_data[i]]);
+            values.push(Value::HeartRate(heart_rate as i32));
+        }
+
+        Record::new(
+            timestamp,
+            values,
+            raw_data,
+            Source::Device(self.device_info.mac_address),
+        )
+    }
 }
 
 #[async_trait]
@@ -275,27 +315,7 @@ impl Device for SystoMC400 {
                 ..
             } = bt_event
             {
-                let timestamp = utils::naive_date_time_from_le_bytes(&value[7..14]);
-
-                let systolic_raw = u16::from_be_bytes([value[2], value[1]]);
-                let diastolic_raw = u16::from_be_bytes([value[4], value[3]]);
-                let (systolic, diastolic) = if value[0] & 1 == 0 {
-                    (systolic_raw, diastolic_raw)
-                } else {
-                    (systolic_raw * 15 / 2, diastolic_raw * 15 / 2)
-                };
-
-                let heart_rate = u16::from_be_bytes([value[15], value[14]]);
-
-                records.push(Record::new(
-                    timestamp,
-                    vec![
-                        Value::BloodPressureSystolic(systolic as i32),
-                        Value::BloodPressureDiastolic(diastolic as i32),
-                        Value::HeartRate(heart_rate as i32),
-                    ],
-                    Source::Device(self.device_info.mac_address),
-                ))
+                records.push(self.read_record(value));
             }
         }
         debug!("Processed all events, produced {} records", records.len());
