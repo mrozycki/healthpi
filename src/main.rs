@@ -1,16 +1,24 @@
+#[macro_use]
+extern crate diesel;
+
 mod devices;
 mod store;
 
+use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{collections::HashMap, error::Error};
 
 use bluez_async::{BluetoothSession, DeviceId, DiscoveryFilter, Transport};
 use chrono::{DateTime, Utc};
 use devices::device::{Device, Factory};
+use diesel::{Connection, SqliteConnection};
+use dotenv::dotenv;
 use log::{debug, error, info};
 use tokio::time;
+
+use crate::store::db::measurement::MeasurementRepository;
 
 fn display_device(device: &dyn Device) -> String {
     device
@@ -21,9 +29,22 @@ fn display_device(device: &dyn Device) -> String {
         .to_owned()
 }
 
+pub fn connect_to_database() -> Result<Arc<Mutex<SqliteConnection>>, Box<dyn Error>> {
+    dotenv().ok();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let connection = SqliteConnection::establish(&database_url)?;
+    Ok(Arc::new(Mutex::new(connection)))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     log4rs::init_file("log4rs.yml", Default::default())?;
+
+    info!("Connecting to database");
+    let conn = connect_to_database()?;
+    let measurement_repository = MeasurementRepository::new(conn.clone());
+
+    info!("Starting Bluetooth session");
     let (_, session) = BluetoothSession::new().await?;
     let factory = Factory::from_file("devices.csv")?;
 
@@ -70,13 +91,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             info!("Getting data from {}", display_device(device.as_ref()));
             match device.get_data(&session).await {
-                Ok(data) => {
-                    info!("Fetched {} records", data.len());
-                    debug!("Last 5 records loaded",);
-                    data.iter()
+                Ok(records) => {
+                    info!("Fetched {} records", records.len());
+                    debug!("Last 3 records loaded",);
+                    records
+                        .iter()
                         .rev()
-                        .take(5)
+                        .take(3)
                         .for_each(|record| debug!("{:?}", record));
+
+                    info!("Disconnecting");
+                    device.disconnect(&session).await?;
+
+                    info!("Storing records in database");
+                    if let Err(e) = measurement_repository.store_records(records) {
+                        error!("Failed to store records in database, skipping. {}", e);
+                        continue;
+                    }
 
                     let backoff_expiry = chrono::Utc::now()
                         .checked_add_signed(chrono::Duration::minutes(5))
@@ -87,9 +118,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         backoff_expiry
                     );
                     backoff_table.insert(device.get_device_info().id.clone(), backoff_expiry);
-
-                    info!("Disconnecting");
-                    device.disconnect(&session).await?;
                 }
                 Err(e) => error!("Failed to get data: {:?}", e),
             }

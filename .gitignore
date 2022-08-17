@@ -1,3 +1,5 @@
 /target
 /log
 devices.csv
+.env
+*.db

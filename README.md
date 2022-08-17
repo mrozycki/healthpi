@@ -33,3 +33,39 @@ cargo run --release
 ```
 
 in the project root directory in order to run the program.
+
+### Device setup
+
+Currently WagaPi does not support pairing devices. In order to set up a device
+to work with WagaPi, you need to create a `devices.csv` file, including one
+device MAC address per file. If your device needs a special pairing procedure
+(e.g. providing one-time code to establish an encrypted connection), you need
+to perform it through an external tool, e.g. `bluetoothctl`. This only needs
+to be done one per device.
+
+### Database setup
+
+WagaPi uses [diesel](https://diesel.rs) to manage database migrations.
+At this point, you need to run the migrations manually. In order to do that,
+you will have to install `diesel_cli` with sqlite enabled. This also requires
+`sqlite3` to be installed.
+
+```
+sudo apt install sqlite3 libsqlite3-dev
+cargo install diesel_cli --no-default-features --features sqlite 
+```
+
+After the tools are installed, you need to create a `.env` file with
+a `DATABASE_URL` variable set, pointing to an sqlite database file. The name
+of the file does not matter, as both `diesel_cli` and WagaPi read it from
+the same `.env` file.
+
+```
+echo DATABASE_URL=wagapi.db > .env
+```
+
+After that you run the migration by simply executing:
+
+```
+diesel migration run
+```
