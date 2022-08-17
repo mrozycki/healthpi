@@ -69,3 +69,16 @@ After that you run the migration by simply executing:
 ```
 diesel migration run
 ```
+
+Local development setup
+-----------------------
+
+### Git hooks
+
+This repository has git hooks prepared that check simple conditions that might
+otherwise trip up the CI setup. We recommend that you use them. In order to set
+them up, run the following command inside the repository:
+
+```
+git config core.hooksPath .githooks
+```
