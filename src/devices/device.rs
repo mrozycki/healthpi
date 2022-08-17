@@ -5,7 +5,7 @@ use std::{collections::HashSet, error::Error, fs::File};
 
 use async_trait::async_trait;
 use bluez_async::{BluetoothSession, DeviceId, DeviceInfo, MacAddress};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use log::{debug, info, warn};
 
 use super::{contour, soehnle};
@@ -118,7 +118,7 @@ impl Factory {
         info!(
             "Ignoring device {} until {}",
             display_device(device.get_device_info()),
-            expiry
+            expiry.with_timezone(&Local)
         );
         expiry
     }

@@ -51,10 +51,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let running = Arc::new(AtomicBool::new(true));
     let running2 = running.clone();
     ctrlc::set_handler(move || running2.store(false, Ordering::Relaxed))?;
-    while running.load(Ordering::Relaxed) {
-        debug!("Waiting for devices...");
-        time::sleep(Duration::from_secs(1)).await;
 
+    info!("Waiting for devices");
+    while running.load(Ordering::Relaxed) {
+        time::sleep(Duration::from_secs(1)).await;
         let mut devices = session.get_devices().await?.into_iter();
 
         while let Some(device) = devices.next().and_then(|x| factory.make_device(x)) {
@@ -67,32 +67,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
 
-            info!(
-                "Getting data from {}",
-                display_device(device.get_device_info())
-            );
-            match device.get_data(&session).await {
-                Ok(records) => {
-                    info!("Fetched {} records", records.len());
-                    debug!("Last 3 records loaded",);
-                    records
-                        .iter()
-                        .rev()
-                        .take(3)
-                        .for_each(|record| debug!("{:?}", record));
-
-                    info!("Disconnecting");
-                    device.disconnect(&session).await?;
-
-                    info!("Storing records in database");
-                    if let Err(e) = measurement_repository.store_records(records) {
-                        error!("Failed to store records in database, skipping. {}", e);
-                        continue;
-                    }
-                    factory.mark_processed(device.as_ref());
+            info!("Getting data");
+            let records = match device.get_data(&session).await {
+                Ok(records) => records,
+                Err(e) => {
+                    error!("Failed to get data: {:?}", e);
+                    continue;
                 }
-                Err(e) => error!("Failed to get data: {:?}", e),
+            };
+            info!("Fetched {} records", records.len());
+            debug!("Last 3 records loaded",);
+            records
+                .iter()
+                .rev()
+                .take(3)
+                .for_each(|record| debug!("{:?}", record));
+
+            info!("Disconnecting");
+            device.disconnect(&session).await?;
+
+            info!("Storing records in database");
+            if let Err(e) = measurement_repository.store_records(records) {
+                error!("Failed to store records in database, skipping. {}", e);
+                continue;
             }
+
+            info!("Device processed successfully");
+            factory.mark_processed(device.as_ref());
         }
     }
     info!("Received SIGINT, terminating...");
