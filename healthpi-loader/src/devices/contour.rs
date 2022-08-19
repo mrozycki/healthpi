@@ -7,10 +7,9 @@ use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
 
-use crate::{
-    devices::utils,
-    store::measurement::{MealIndicator, Record, Source, Value},
-};
+use healthpi_db::measurement::{MealIndicator, Record, Source, Value};
+
+use crate::devices::utils;
 
 use super::device::Device;
 

@@ -1,38 +1,25 @@
-#[macro_use]
-extern crate diesel;
-
 mod devices;
-mod store;
 
-use std::env;
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use bluez_async::{BluetoothSession, DiscoveryFilter, Transport};
 use devices::device::Factory;
-use diesel::{Connection, SqliteConnection};
-use dotenv::dotenv;
+use healthpi_db::db::connection::Connection;
 use log::{debug, error, info};
 use tokio::time;
 
 use crate::devices::device::display_device;
-use crate::store::db::measurement::MeasurementRepository;
-
-pub fn connect_to_database() -> Result<Arc<Mutex<SqliteConnection>>, Box<dyn Error>> {
-    dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let connection = SqliteConnection::establish(&database_url)?;
-    Ok(Arc::new(Mutex::new(connection)))
-}
+use healthpi_db::db::measurement::MeasurementRepository;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     log4rs::init_file("log4rs.yml", Default::default())?;
 
     info!("Connecting to database");
-    let conn = connect_to_database()?;
+    let conn = Connection::establish()?;
     let measurement_repository = MeasurementRepository::new(conn.clone());
 
     info!("Starting Bluetooth session");

@@ -1,21 +1,5 @@
-[package]
-name = "healthpi"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-async-trait = "0.1.56"
-bluez-async = "0.6.0"
-chrono = "0.4.19"
-ctrlc = "3.2.3"
-diesel = { version = "2.0.0-rc.1", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
-dotenv = "0.15.0"
-futures = "0.3.21"
-libsqlite3-sys = { version = "0.25.1", features = ["bundled"]}
-log = "0.4.17"
-log4rs = "1.1.1"
-num = "0.4"
-num-derive = "0.3"
-num-traits = "0.2"
-tokio = { version = "1.17.0", features = ["macros", "rt", "rt-multi-thread"] }
-uuid = "1.1.2"
+[workspace]
+members = [
+    "healthpi-db",
+    "healthpi-loader"
+]

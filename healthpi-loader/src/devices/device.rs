@@ -8,8 +8,9 @@ use bluez_async::{BluetoothSession, DeviceId, DeviceInfo, MacAddress};
 use chrono::{DateTime, Local, Utc};
 use log::{debug, info, warn};
 
+use healthpi_db::measurement::Record;
+
 use super::{contour, soehnle};
-use crate::store::measurement::Record;
 
 #[async_trait]
 pub trait Device {

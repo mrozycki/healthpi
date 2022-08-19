@@ -1,13 +1,10 @@
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
+use std::error::Error;
 
-use diesel::{RunQueryDsl, SqliteConnection};
+use diesel::RunQueryDsl;
 
-use crate::store::measurement::{Record, Value};
+use crate::measurement::{Record, Value};
 
-use super::schema::*;
+use super::{connection::Connection, schema::*};
 
 #[derive(Insertable)]
 #[diesel(table_name = records)]
@@ -46,23 +43,23 @@ impl NewValue {
 }
 
 pub struct MeasurementRepository {
-    connection: Arc<Mutex<SqliteConnection>>,
+    connection: Connection,
 }
 
 impl MeasurementRepository {
-    pub fn new(connection: Arc<Mutex<SqliteConnection>>) -> Self {
+    pub fn new(connection: Connection) -> Self {
         Self { connection }
     }
 
     pub fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>> {
         mod record_values {
-            pub use crate::store::db::schema::record_values::dsl::*;
+            pub use crate::db::schema::record_values::dsl::*;
         }
         mod records {
-            pub use crate::store::db::schema::records::dsl::*;
+            pub use crate::db::schema::records::dsl::*;
         }
 
-        let mut conn = self.connection.try_lock().map_err(|e| e.to_string())?;
+        let mut conn = self.connection.lock().map_err(|e| e.to_string())?;
         for record in records.into_iter() {
             let (new_record, values) = record.into();
             let new_record_id = diesel::insert_into(records::records)

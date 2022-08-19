@@ -1,0 +1,15 @@
+[package]
+name = "healthpi-db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bluez-async = "0.6.0"
+chrono = "0.4.19"
+diesel = { version = "2.0.0-rc.1", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+dotenv = "0.15.0"
+libsqlite3-sys = { version = "0.25.1", features = ["bundled"]}
+log = "0.4.17"
+num = "0.4"
+num-derive = "0.3"
+num-traits = "0.2"

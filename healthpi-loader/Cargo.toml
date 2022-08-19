@@ -1,0 +1,16 @@
+[package]
+name = "healthpi-loader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+healthpi-db = { path = "../healthpi-db" }
+async-trait = "0.1.56"
+bluez-async = "0.6.0"
+chrono = "0.4.19"
+ctrlc = "3.2.3"
+futures = "0.3.21"
+log = "0.4.17"
+log4rs = "1.1.1"
+tokio = { version = "1.17.0", features = ["macros", "rt", "rt-multi-thread"] }
+uuid = "1.1.2"
