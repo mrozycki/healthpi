@@ -10,9 +10,10 @@ use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
 
+use healthpi_db::measurement::{Record, Source, Value};
+use healthpi_db::user::User;
+
 use crate::devices::utils;
-use crate::store::measurement::{Record, Source, Value};
-use crate::store::user::User;
 
 use super::device::Device;
 

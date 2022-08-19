@@ -58,16 +58,17 @@ cargo install diesel_cli --no-default-features --features sqlite
 After the tools are installed, you need to create a `.env` file with
 a `DATABASE_URL` variable set, pointing to an sqlite database file. The name
 of the file does not matter, as both `diesel_cli` and HealthPi read it from
-the same `.env` file.
+the same `.env` file. While you can use a relative path, we suggest providing
+an absolute path.
 
 ```
-echo DATABASE_URL=healthpi.db > .env
+echo DATABASE_URL=/home/pi/healthpi/healthpi.db > .env
 ```
 
 After that you run the migration by simply executing:
 
 ```
-diesel migration run
+cd healthpi-db; diesel migration run; cd ..
 ```
 
 Local development setup
