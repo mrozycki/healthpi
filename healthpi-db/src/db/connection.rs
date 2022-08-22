@@ -4,8 +4,14 @@ use std::{
     sync::{Arc, LockResult, Mutex, MutexGuard},
 };
 
-use diesel::{Connection as DieselConnection, SqliteConnection};
+use diesel::{connection::SimpleConnection, Connection as DieselConnection, SqliteConnection};
 use dotenv::dotenv;
+
+const SETUP_QUERY: &'static str = "PRAGMA mmap_size = 30000000000;
+PRAGMA cache_size = -1000;
+PRAGMA page_size = 4096;
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;";
 
 #[derive(Clone)]
 pub struct Connection {
@@ -17,6 +23,9 @@ impl Connection {
         dotenv().ok();
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let connection = SqliteConnection::establish(&database_url)?;
+
+        connection.batch_execute(SETUP_QUERY)?;
+
         Ok(Self {
             inner: Arc::new(Mutex::new(connection)),
         })

@@ -1,40 +1,53 @@
 use std::error::Error;
 
 use diesel::RunQueryDsl;
+use log::debug;
+use uuid::Uuid;
 
 use crate::measurement::{Record, Value};
 
 use super::{connection::Connection, schema::*};
 
 #[derive(Insertable)]
-#[diesel(table_name = records)]
+#[table_name = "records"]
 pub struct NewRecord {
+    id: Vec<u8>,
     timestamp: i64,
     source: String,
 }
 
-impl Into<(NewRecord, Vec<Value>)> for Record {
-    fn into(self) -> (NewRecord, Vec<Value>) {
+impl Into<(NewRecord, Vec<NewValue>)> for Record {
+    fn into(self) -> (NewRecord, Vec<NewValue>) {
+        let record_id: Vec<u8> = Uuid::new_v4().into_bytes().into_iter().collect();
+        let new_values = self
+            .values
+            .into_iter()
+            .map(|value| NewValue::from_value(value, record_id.clone()))
+            .collect();
         let new_record = NewRecord {
+            id: record_id,
             timestamp: self.timestamp.timestamp(),
             source: format!("{:?}", self.source),
         };
-        (new_record, self.values)
+
+        (new_record, new_values)
     }
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = record_values)]
+#[table_name = "record_values"]
 pub struct NewValue {
-    record_id: i32,
+    id: Vec<u8>,
+    record_id: Vec<u8>,
     value_type: i32,
     value: f64,
 }
 
 impl NewValue {
-    pub fn from_value(dto: Value, record_id: i32) -> Self {
+    pub fn from_value(dto: Value, record_id: Vec<u8>) -> Self {
         let (value_type, value): (usize, f64) = dto.into();
         Self {
+            id: Uuid::new_v4().into_bytes().into_iter().collect(),
             record_id,
             value_type: value_type as i32,
             value,
@@ -59,23 +72,21 @@ impl MeasurementRepository {
             pub use crate::db::schema::records::dsl::*;
         }
 
+        debug!("Converting records");
+        let (new_records, new_values_vecs): (Vec<NewRecord>, Vec<Vec<NewValue>>) =
+            records.into_iter().map(Into::into).unzip();
+        let new_values: Vec<NewValue> = new_values_vecs.into_iter().flatten().collect();
+
         let mut conn = self.connection.lock().map_err(|e| e.to_string())?;
-        for record in records.into_iter() {
-            let (new_record, values) = record.into();
-            let new_record_id = diesel::insert_into(records::records)
-                .values(&new_record)
-                .returning(records::id)
-                .get_result(&mut *conn)?;
+        debug!("Storing records");
+        diesel::insert_into(records::records)
+            .values(new_records)
+            .execute(&mut *conn)?;
 
-            let new_values = values
-                .into_iter()
-                .map(|value| NewValue::from_value(value, new_record_id))
-                .collect::<Vec<_>>();
-
-            diesel::insert_into(record_values::record_values)
-                .values(new_values)
-                .execute(&mut *conn)?;
-        }
+        debug!("Storing values");
+        diesel::insert_into(record_values::record_values)
+            .values(new_values)
+            .execute(&mut *conn)?;
         Ok(())
     }
 }

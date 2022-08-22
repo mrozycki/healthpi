@@ -1,7 +1,7 @@
 table! {
     record_values (id) {
-        id -> Integer,
-        record_id -> Integer,
+        id -> Binary,
+        record_id -> Binary,
         value -> Double,
         value_type -> Integer,
     }
@@ -9,7 +9,7 @@ table! {
 
 table! {
     records (id) {
-        id -> Integer,
+        id -> Binary,
         timestamp -> BigInt,
         source -> Text,
     }

@@ -1,5 +1,14 @@
 /target
-/log
+
 devices.csv
 .env
+
 *.db
+*.db-wal
+*.db-shm
+
+*.unison*
+
+/log
+flamegraph.svg
+perf.data
