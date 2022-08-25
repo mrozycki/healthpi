@@ -1,6 +1,7 @@
-use bluez_async::MacAddress;
 use chrono::NaiveDateTime;
 use num_derive::FromPrimitive;
+
+use super::device::MacAddress;
 
 #[derive(Debug, FromPrimitive)]
 pub enum MealIndicator {

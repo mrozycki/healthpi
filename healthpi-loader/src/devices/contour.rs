@@ -88,6 +88,7 @@ impl Device for ElitePlus {
             .write_characteristic_value(&racp.id, vec![1, 1])
             .await?;
 
+        let mac_address: [u8; 6] = self.device_info.mac_address.into();
         let mut records = BTreeMap::<u16, Record>::new();
         info!("Processing measurement notifications");
         while let Ok(Some(bt_event)) =
@@ -108,7 +109,7 @@ impl Device for ElitePlus {
                         timestamp,
                         vec![Value::Glucose(glucose as i32)],
                         value,
-                        Source::Device(self.device_info.mac_address),
+                        Source::Device(mac_address.into()),
                     ),
                 );
             }

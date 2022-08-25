@@ -115,6 +115,7 @@ impl Device for Shape200 {
             .await?;
 
         info!("Processing measurement notifications");
+        let raw_mac_addres: [u8; 6] = self.device_info.mac_address.into();
         let mut records = Vec::new();
         while let Ok(Some(bt_event)) = timeout(Duration::from_millis(1000), events.next()).await {
             if let BluetoothEvent::Characteristic {
@@ -146,7 +147,7 @@ impl Device for Shape200 {
                         timestamp,
                         values,
                         value,
-                        Source::Device(self.device_info.mac_address),
+                        Source::Device(raw_mac_addres.into()),
                     ))
                 }
             }
@@ -264,11 +265,13 @@ impl SystoMC400 {
             values.push(Value::HeartRate(heart_rate as i32));
         }
 
+        let raw_mac_address: [u8; 6] = self.device_info.mac_address.into();
+
         Record::new(
             timestamp,
             values,
             raw_data,
-            Source::Device(self.device_info.mac_address),
+            Source::Device(raw_mac_address.into()),
         )
     }
 }
