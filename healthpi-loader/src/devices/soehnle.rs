@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use bluez_async::{
     BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo, WriteOptions, WriteType,
 };
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
 use log::{debug, info};
 use tokio::time::timeout;
@@ -313,13 +313,24 @@ impl Device for SystoMC400 {
 
         info!("Processing notifications");
         let mut records = Vec::new();
+        let mut prev_timestamp = NaiveDateTime::from_timestamp(0, 0);
+        let mut timestamp_duplicate_count = 0;
         while let Ok(Some(bt_event)) = timeout(Duration::from_millis(5000), events.next()).await {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
                 ..
             } = bt_event
             {
-                records.push(self.read_record(value));
+                let mut record = self.read_record(value);
+                if record.timestamp == prev_timestamp {
+                    timestamp_duplicate_count += 1;
+                    record.timestamp =
+                        record.timestamp + chrono::Duration::seconds(timestamp_duplicate_count);
+                } else {
+                    timestamp_duplicate_count = 0;
+                    prev_timestamp = record.timestamp.clone();
+                }
+                records.push(record);
             }
         }
         debug!("Processed all events, produced {} records", records.len());

@@ -1,8 +1,11 @@
-use std::error::Error;
+use std::{
+    error::Error,
+    hash::{Hash, Hasher},
+};
 
 use diesel::RunQueryDsl;
 use log::debug;
-use uuid::Uuid;
+use rustc_hash::FxHasher;
 
 use crate::measurement::{Record, Value};
 
@@ -11,21 +14,25 @@ use super::{connection::Connection, schema::*};
 #[derive(Insertable)]
 #[table_name = "records"]
 pub struct NewRecord {
-    id: Vec<u8>,
+    record_ref: Vec<u8>,
     timestamp: i64,
     source: String,
 }
 
 impl Into<(NewRecord, Vec<NewValue>)> for Record {
     fn into(self) -> (NewRecord, Vec<NewValue>) {
-        let record_id: Vec<u8> = Uuid::new_v4().into_bytes().into_iter().collect();
+        let mut hasher = FxHasher::default();
+        self.timestamp.hash(&mut hasher);
+        self.source.hash(&mut hasher);
+        let record_ref = hasher.finish().to_le_bytes().to_vec();
+
         let new_values = self
             .values
             .into_iter()
-            .map(|value| NewValue::from_value(value, record_id.clone()))
+            .map(|value| NewValue::from_value(value, record_ref.clone()))
             .collect();
         let new_record = NewRecord {
-            id: record_id,
+            record_ref,
             timestamp: self.timestamp.timestamp(),
             source: format!("{:?}", self.source),
         };
@@ -37,18 +44,16 @@ impl Into<(NewRecord, Vec<NewValue>)> for Record {
 #[derive(Insertable)]
 #[table_name = "record_values"]
 pub struct NewValue {
-    id: Vec<u8>,
-    record_id: Vec<u8>,
+    record_ref: Vec<u8>,
     value_type: i32,
     value: f64,
 }
 
 impl NewValue {
-    pub fn from_value(dto: Value, record_id: Vec<u8>) -> Self {
+    pub fn from_value(dto: Value, record_ref: Vec<u8>) -> Self {
         let (value_type, value): (usize, f64) = dto.into();
         Self {
-            id: Uuid::new_v4().into_bytes().into_iter().collect(),
-            record_id,
+            record_ref,
             value_type: value_type as i32,
             value,
         }
@@ -79,12 +84,12 @@ impl MeasurementRepository {
 
         let mut conn = self.connection.lock().map_err(|e| e.to_string())?;
         debug!("Storing records");
-        diesel::insert_into(records::records)
+        diesel::replace_into(records::records)
             .values(new_records)
             .execute(&mut *conn)?;
 
         debug!("Storing values");
-        diesel::insert_into(record_values::record_values)
+        diesel::replace_into(record_values::record_values)
             .values(new_values)
             .execute(&mut *conn)?;
         Ok(())
