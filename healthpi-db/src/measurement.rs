@@ -68,7 +68,7 @@ impl TryFrom<(usize, f64)> for Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub enum Source {
     Device(MacAddress),
 }
