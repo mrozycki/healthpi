@@ -6,6 +6,7 @@ use bluez_async::{
 };
 use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
+use healthpi_db::device::MacAddress;
 use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
@@ -235,16 +236,16 @@ impl SystoMC400 {
         Self { device_info }
     }
 
-    fn read_record(&self, raw_data: Vec<u8>) -> Record {
+    fn read_record(raw_data: Vec<u8>, mac_address: MacAddress) -> Record {
         let mut i = 1;
 
         let mut values = Vec::new();
-        let systolic_raw = u16::from_be_bytes([raw_data[i + 1], raw_data[i]]);
-        let diastolic_raw = u16::from_be_bytes([raw_data[i + 3], raw_data[i + 2]]);
+        let systolic_raw: u32 = u16::from_be_bytes([raw_data[i + 1], raw_data[i]]).into();
+        let diastolic_raw: u32 = u16::from_be_bytes([raw_data[i + 3], raw_data[i + 2]]).into();
         let (systolic, diastolic) = if raw_data[0] & 1 == 0 {
             (systolic_raw, diastolic_raw)
         } else {
-            (systolic_raw * 15 / 2, diastolic_raw * 15 / 2)
+            (systolic_raw * 15 / 2000, diastolic_raw * 15 / 2000)
         };
         values.append(&mut vec![
             Value::BloodPressureSystolic(systolic as i32),
@@ -265,7 +266,7 @@ impl SystoMC400 {
             values.push(Value::HeartRate(heart_rate as i32));
         }
 
-        let raw_mac_address: [u8; 6] = self.device_info.mac_address.into();
+        let raw_mac_address: [u8; 6] = mac_address.into();
 
         Record::new(
             timestamp,
@@ -315,13 +316,14 @@ impl Device for SystoMC400 {
         let mut records = Vec::new();
         let mut prev_timestamp = NaiveDateTime::from_timestamp(0, 0);
         let mut timestamp_duplicate_count = 0;
+        let raw_mac_address: [u8; 6] = self.device_info.mac_address.into();
         while let Ok(Some(bt_event)) = timeout(Duration::from_millis(5000), events.next()).await {
             if let BluetoothEvent::Characteristic {
                 event: CharacteristicEvent::Value { value },
                 ..
             } = bt_event
             {
-                let mut record = self.read_record(value);
+                let mut record = Self::read_record(value, raw_mac_address.into());
                 if record.timestamp == prev_timestamp {
                     timestamp_duplicate_count += 1;
                     record.timestamp =
@@ -340,5 +342,103 @@ impl Device for SystoMC400 {
 
     fn get_device_info(&self) -> &DeviceInfo {
         &self.device_info
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{NaiveDate, NaiveTime};
+
+    use super::*;
+
+    #[test]
+    fn read_record_all_fields_present() {
+        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let raw_data = vec![
+            30, 128, 0, 75, 0, 93, 0, 230, 7, 8, 4, 13, 49, 0, 80, 0, 0, 0, 0,
+        ];
+        let expected = Record::new(
+            NaiveDateTime::new(
+                NaiveDate::from_ymd(2022, 8, 4),
+                NaiveTime::from_hms(13, 49, 0),
+            ),
+            vec![
+                Value::BloodPressureSystolic(128),
+                Value::BloodPressureDiastolic(75),
+                Value::HeartRate(80),
+            ],
+            raw_data.clone(),
+            Source::Device(mac_address),
+        );
+
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+
+        assert_eq!(record, expected);
+    }
+
+    #[test]
+    fn read_record_all_fields_present_kpa() {
+        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        // 128 mmHg = 17100 Pa = 66 * 256 + 204
+        // 75 mmHg = 10000 Pa = 39 * 256 + 16
+        let raw_data = vec![
+            31, 204, 66, 16, 39, 93, 0, 230, 7, 8, 4, 13, 49, 0, 80, 0, 0, 0, 0,
+        ];
+        let expected = Record::new(
+            NaiveDateTime::new(
+                NaiveDate::from_ymd(2022, 8, 4),
+                NaiveTime::from_hms(13, 49, 0),
+            ),
+            vec![
+                Value::BloodPressureSystolic(128),
+                Value::BloodPressureDiastolic(75),
+                Value::HeartRate(80),
+            ],
+            raw_data.clone(),
+            Source::Device(mac_address),
+        );
+
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+
+        assert_eq!(record, expected);
+    }
+
+    #[test]
+    fn read_record_without_timestamp() {
+        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let raw_data = vec![28, 128, 0, 75, 0, 93, 0, 80, 0, 0, 0, 0];
+        let expected_values = vec![
+            Value::BloodPressureSystolic(128),
+            Value::BloodPressureDiastolic(75),
+            Value::HeartRate(80),
+        ];
+
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+
+        assert_eq!(record.raw_data, raw_data);
+        assert_eq!(record.source, Source::Device(mac_address));
+        assert_eq!(record.values, expected_values);
+    }
+
+    #[test]
+    fn read_record_without_heart_rate() {
+        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let raw_data = vec![26, 128, 0, 75, 0, 93, 0, 230, 7, 8, 4, 13, 49, 0, 0, 0, 0];
+        let expected = Record::new(
+            NaiveDateTime::new(
+                NaiveDate::from_ymd(2022, 8, 4),
+                NaiveTime::from_hms(13, 49, 0),
+            ),
+            vec![
+                Value::BloodPressureSystolic(128),
+                Value::BloodPressureDiastolic(75),
+            ],
+            raw_data.clone(),
+            Source::Device(mac_address),
+        );
+
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+
+        assert_eq!(record, expected);
     }
 }
