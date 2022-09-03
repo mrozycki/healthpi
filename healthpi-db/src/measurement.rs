@@ -3,7 +3,7 @@ use num_derive::FromPrimitive;
 
 use super::device::MacAddress;
 
-#[derive(Debug, FromPrimitive)]
+#[derive(Debug, FromPrimitive, PartialEq)]
 pub enum MealIndicator {
     NoIndication,
     NoMeal,
@@ -11,7 +11,7 @@ pub enum MealIndicator {
     AfterMeal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum Value {
     Weight(f64),
@@ -68,12 +68,12 @@ impl TryFrom<(usize, f64)> for Value {
     }
 }
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Hash, PartialEq)]
 pub enum Source {
     Device(MacAddress),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(dead_code)]
 pub struct Record {
     pub timestamp: NaiveDateTime,
