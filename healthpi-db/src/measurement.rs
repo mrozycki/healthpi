@@ -1,7 +1,6 @@
 use chrono::NaiveDateTime;
+use healthpi_bt::MacAddress;
 use num_derive::FromPrimitive;
-
-use super::device::MacAddress;
 
 #[derive(Debug, FromPrimitive, PartialEq)]
 pub enum MealIndicator {
