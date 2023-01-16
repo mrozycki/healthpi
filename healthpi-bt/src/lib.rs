@@ -92,6 +92,7 @@ impl BleCharacteristicEvent {
     }
 }
 
+#[mockall::automock]
 #[async_trait]
 pub trait BleCharacteristic: Send + Sync + fmt::Debug {
     async fn subscribe(
@@ -186,6 +187,7 @@ impl BleCharacteristic for BleCharacteristicImpl {
     }
 }
 
+#[mockall::automock]
 #[async_trait]
 pub trait BleDevice: Send + Sync {
     async fn connect(&self) -> Result<(), DeviceError>;
@@ -279,8 +281,9 @@ impl BleDevice for BleDeviceImpl {
     }
 }
 
+#[mockall::automock]
 #[async_trait]
-pub trait BleSession {
+pub trait BleSession: Send + Sync {
     async fn start_discovery(&self) -> Result<(), DeviceError>;
     async fn stop_discovery(&self) -> Result<(), DeviceError>;
 

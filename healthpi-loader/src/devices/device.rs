@@ -48,12 +48,18 @@ impl BackoffTable {
     }
 }
 
-pub struct Factory {
+#[mockall::automock]
+pub trait Factory: Send + Sync {
+    fn make_device(&self, ble_device: Box<dyn BleDevice>) -> Option<Box<dyn Device>>;
+    fn mark_processed(&mut self, device: &dyn Device) -> DateTime<Utc>;
+}
+
+pub struct FactoryImpl {
     paired_devices: HashSet<MacAddress>,
     backoff_table: BackoffTable,
 }
 
-impl Factory {
+impl FactoryImpl {
     #[allow(dead_code)]
     pub fn new(paired_devices: HashSet<MacAddress>) -> Self {
         Self {
@@ -75,8 +81,10 @@ impl Factory {
         debug!("Loaded devices: {:?}", paired_devices);
         Ok(Self::new(paired_devices))
     }
+}
 
-    pub fn make_device(&self, ble_device: Box<dyn BleDevice>) -> Option<Box<dyn Device>> {
+impl Factory for FactoryImpl {
+    fn make_device(&self, ble_device: Box<dyn BleDevice>) -> Option<Box<dyn Device>> {
         if !ble_device.in_range() {
             None
         } else if !self.paired_devices.contains(&ble_device.mac_address()) {
@@ -102,7 +110,7 @@ impl Factory {
         }
     }
 
-    pub fn mark_processed(&mut self, device: &dyn Device) -> DateTime<Utc> {
+    fn mark_processed(&mut self, device: &dyn Device) -> DateTime<Utc> {
         let expiry = self.backoff_table.mark(device.get_ble_device());
         info!(
             "Ignoring device {} until {}",
