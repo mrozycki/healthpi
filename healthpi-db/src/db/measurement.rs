@@ -60,16 +60,23 @@ impl NewValue {
     }
 }
 
-pub struct MeasurementRepository {
+#[mockall::automock]
+pub trait MeasurementRepository: Send + Sync {
+    fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>>;
+}
+
+pub struct MeasurementRepositoryImpl {
     connection: Connection,
 }
 
-impl MeasurementRepository {
+impl MeasurementRepositoryImpl {
     pub fn new(connection: Connection) -> Self {
         Self { connection }
     }
+}
 
-    pub fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>> {
+impl MeasurementRepository for MeasurementRepositoryImpl {
+    fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>> {
         mod record_values {
             pub use crate::db::schema::record_values::dsl::*;
         }
