@@ -5,13 +5,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use bluez_async::{BluetoothSession, DiscoveryFilter, Transport};
 use devices::device::Factory;
 use healthpi_db::db::connection::Connection;
 use log::{debug, error, info};
 use tokio::time;
 
-use crate::devices::device::display_device;
 use healthpi_db::db::measurement::MeasurementRepository;
 
 #[tokio::main]
@@ -23,16 +21,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let measurement_repository = MeasurementRepository::new(conn.clone());
 
     info!("Starting Bluetooth session");
-    let (_, session) = BluetoothSession::new().await?;
+    let ble_session = healthpi_bt::create_session().await?;
     let mut factory = Factory::from_file("devices.csv")?;
 
     info!("Starting discovery");
-    session
-        .start_discovery_with_filter(&DiscoveryFilter {
-            transport: Some(Transport::Le),
-            ..Default::default()
-        })
-        .await?;
+    ble_session.start_discovery().await?;
 
     let running = Arc::new(AtomicBool::new(true));
     let running2 = running.clone();
@@ -41,20 +34,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Waiting for devices");
     while running.load(Ordering::Relaxed) {
         time::sleep(Duration::from_secs(1)).await;
-        let mut devices = session.get_devices().await?.into_iter();
+        let mut devices = ble_session.get_devices().await?.into_iter();
 
         while let Some(device) = devices.next().and_then(|x| factory.make_device(x)) {
             info!(
                 "Found device {}, connecting",
-                display_device(device.get_device_info())
+                device.get_ble_device().name()
             );
-            if let Err(e) = device.connect(&session).await {
+            if let Err(e) = device.connect().await {
                 error!("Failed to connect, skipping: {:?}", e);
                 continue;
             }
 
             info!("Getting data");
-            let records = match device.get_data(&session).await {
+            let records = match device.get_data().await {
                 Ok(records) => records,
                 Err(e) => {
                     error!("Failed to get data: {:?}", e);
@@ -70,7 +63,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .for_each(|record| debug!("{:?}", record));
 
             info!("Disconnecting");
-            device.disconnect(&session).await?;
+            device.disconnect().await?;
 
             info!("Storing records in database");
             if let Err(e) = measurement_repository.store_records(records) {
@@ -83,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     info!("Received SIGINT, terminating...");
-    session.stop_discovery().await?;
+    ble_session.stop_discovery().await?;
 
     Ok(())
 }

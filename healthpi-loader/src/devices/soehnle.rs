@@ -1,18 +1,14 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bluez_async::{
-    BluetoothEvent, BluetoothSession, CharacteristicEvent, DeviceInfo, WriteOptions, WriteType,
-};
 use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
-use healthpi_db::device::MacAddress;
+use healthpi_bt::{BleDevice, MacAddress};
+use healthpi_db::measurement::{Record, Source, Value};
+use healthpi_db::user::User;
 use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
-
-use healthpi_db::measurement::{Record, Source, Value};
-use healthpi_db::user::User;
 
 use crate::devices::utils;
 
@@ -25,132 +21,93 @@ const BLOOD_PRESSURE_SERVICE: Uuid = Uuid::from_u128(0x00001810_0000_1000_8000_0
 const BLOOD_PRESSURE_CHARACTERISTIC: Uuid = Uuid::from_u128(0x00002a35_0000_1000_8000_00805f9b34fb);
 
 pub struct Shape200 {
-    device_info: DeviceInfo,
+    ble_device: Box<dyn BleDevice>,
 }
 
 impl Shape200 {
-    pub fn new(device_info: DeviceInfo) -> Self {
-        Self { device_info }
+    pub fn new(ble_device: Box<dyn BleDevice>) -> Self {
+        Self { ble_device }
     }
 }
 
 #[async_trait]
 impl Device for Shape200 {
-    async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn std::error::Error>> {
-        session.connect(&self.device_info.id).await?;
+    async fn connect(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.ble_device.connect().await?;
         Ok(())
     }
 
-    async fn disconnect(
-        &self,
-        session: &BluetoothSession,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        session.disconnect(&self.device_info.id).await?;
+    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.ble_device.disconnect().await?;
         Ok(())
     }
 
-    fn get_device_info(&self) -> &DeviceInfo {
-        &self.device_info
+    fn get_ble_device(&self) -> &dyn BleDevice {
+        &*self.ble_device
     }
 
-    async fn get_data(
-        &self,
-        session: &BluetoothSession,
-    ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
+    async fn get_data(&self) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
         info!("Finding appropriate characteristics");
-        let weight_service = session
-            .get_service_by_uuid(&self.device_info.id, CUSTOM_SERVICE_UUID)
+        let weight_characteristic = self
+            .ble_device
+            .get_characteristic(CUSTOM_SERVICE_UUID, WEIGHT_CUSTOM_CHARACTERISTIC)
             .await?;
-        let weight_characteristic = session
-            .get_characteristic_by_uuid(&weight_service.id, WEIGHT_CUSTOM_CHARACTERISTIC)
-            .await?;
-        let cmd_characteristic = session
-            .get_characteristic_by_uuid(&weight_service.id, CMD_CHARACTERISTIC)
+        let cmd_characteristic = self
+            .ble_device
+            .get_characteristic(CUSTOM_SERVICE_UUID, CMD_CHARACTERISTIC)
             .await?;
 
         info!("Subscribing to notifications");
-        let mut events = session
-            .characteristic_event_stream(&weight_characteristic.id)
-            .await?;
-        session.start_notify(&weight_characteristic.id).await?;
-        session
-            .write_characteristic_value_with_options(
-                &cmd_characteristic.id,
-                vec![0x0c, 1],
-                WriteOptions {
-                    write_type: Some(WriteType::WithResponse),
-                    ..Default::default()
-                },
-            )
+        let mut events = weight_characteristic.subscribe().await?;
+        cmd_characteristic
+            .write_with_response(vec![0x0c, 1])
             .await?;
 
         info!("Reading user data");
-        let user = if let Some(bt_event) = events.next().await {
-            if let BluetoothEvent::Characteristic {
-                event: CharacteristicEvent::Value { value },
-                ..
-            } = bt_event
-            {
-                User::new(
-                    value[3],
-                    value[4] != 0,
-                    u16::from_be_bytes([value[5], value[6]]),
-                    value[9],
-                )
-            } else {
-                panic!("Wrong data received!")
-            }
+        let user = if let Some(event) = events.next().await {
+            User::new(
+                event.value[3],
+                event.value[4] != 0,
+                u16::from_be_bytes([event.value[5], event.value[6]]),
+                event.value[9],
+            )
         } else {
             panic!("Did not receive user data!")
         };
 
-        session
-            .write_characteristic_value_with_options(
-                &cmd_characteristic.id,
-                vec![0x09, 1],
-                WriteOptions {
-                    write_type: Some(WriteType::WithResponse),
-                    ..Default::default()
-                },
-            )
+        cmd_characteristic
+            .write_with_response(vec![0x09, 1])
             .await?;
 
         info!("Processing measurement notifications");
-        let raw_mac_addres: [u8; 6] = self.device_info.mac_address.into();
         let mut records = Vec::new();
-        while let Ok(Some(bt_event)) = timeout(Duration::from_millis(1000), events.next()).await {
-            if let BluetoothEvent::Characteristic {
-                event: CharacteristicEvent::Value { value },
-                ..
-            } = bt_event
-            {
-                if value.len() == 15 {
-                    let timestamp = utils::naive_date_time_from_be_bytes(&value[2..9]);
+        while let Ok(Some(event)) = timeout(Duration::from_millis(1000), events.next()).await {
+            if event.value.len() == 15 {
+                let timestamp = utils::naive_date_time_from_be_bytes(&event.value[2..9]);
 
-                    let weight = u16::from_be_bytes([value[9], value[10]]) as f64 / 10.0;
-                    let mut values = vec![
-                        Value::Weight(weight),
-                        Value::BodyMassIndex(get_body_mass_index(&user, weight)),
-                        Value::BasalMetabolicRate(get_basal_metabolic_rate(&user, weight)),
-                    ];
+                let weight = u16::from_be_bytes([event.value[9], event.value[10]]) as f64 / 10.0;
+                let mut values = vec![
+                    Value::Weight(weight),
+                    Value::BodyMassIndex(get_body_mass_index(&user, weight)),
+                    Value::BasalMetabolicRate(get_basal_metabolic_rate(&user, weight)),
+                ];
 
-                    let imp5 = u16::from_be_bytes([value[11], value[12]]) as f64;
-                    let imp50 = u16::from_be_bytes([value[13], value[14]]) as f64;
-                    if imp50 > 0.0 {
-                        values.append(&mut vec![
-                            Value::FatPercent(get_fat_percentage(&user, weight, imp50)),
-                            Value::WaterPercent(get_water_percentage(&user, weight, imp50)),
-                            Value::MusclePercent(get_muscle_percentage(&user, weight, imp5, imp50)),
-                        ]);
-                    }
-
-                    records.push(Record::new(
-                        timestamp,
-                        values,
-                        value,
-                        Source::Device(raw_mac_addres.into()),
-                    ))
+                let imp5 = u16::from_be_bytes([event.value[11], event.value[12]]) as f64;
+                let imp50 = u16::from_be_bytes([event.value[13], event.value[14]]) as f64;
+                if imp50 > 0.0 {
+                    values.append(&mut vec![
+                        Value::FatPercent(get_fat_percentage(&user, weight, imp50)),
+                        Value::WaterPercent(get_water_percentage(&user, weight, imp50)),
+                        Value::MusclePercent(get_muscle_percentage(&user, weight, imp5, imp50)),
+                    ]);
                 }
+
+                records.push(Record::new(
+                    timestamp,
+                    values,
+                    event.value,
+                    Source::Device(self.ble_device.mac_address()),
+                ))
             }
         }
         debug!("Processed all events, produced {} records", records.len());
@@ -228,12 +185,12 @@ fn get_basal_metabolic_rate(user: &User, weight: f64) -> f64 {
 }
 
 pub struct SystoMC400 {
-    device_info: DeviceInfo,
+    ble_device: Box<dyn BleDevice>,
 }
 
 impl SystoMC400 {
-    pub fn new(device_info: DeviceInfo) -> Self {
-        Self { device_info }
+    pub fn new(ble_device: Box<dyn BleDevice>) -> Self {
+        Self { ble_device }
     }
 
     fn read_record(raw_data: Vec<u8>, mac_address: MacAddress) -> Record {
@@ -279,69 +236,50 @@ impl SystoMC400 {
 
 #[async_trait]
 impl Device for SystoMC400 {
-    async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn std::error::Error>> {
-        session.connect(&self.device_info.id).await?;
+    async fn connect(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.ble_device.connect().await?;
         Ok(())
     }
 
-    async fn disconnect(
-        &self,
-        session: &BluetoothSession,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        session.disconnect(&self.device_info.id).await?;
+    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.ble_device.disconnect().await?;
         Ok(())
     }
 
-    async fn get_data(
-        &self,
-        session: &BluetoothSession,
-    ) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
+    async fn get_data(&self) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
         info!("Finding appropriate characteristics");
-        let measurements = session
-            .get_service_characteristic_by_uuid(
-                &self.device_info.id,
-                BLOOD_PRESSURE_SERVICE,
-                BLOOD_PRESSURE_CHARACTERISTIC,
-            )
+        let measurements = self
+            .ble_device
+            .get_characteristic(BLOOD_PRESSURE_SERVICE, BLOOD_PRESSURE_CHARACTERISTIC)
             .await?;
-        debug!("Got: {:?}", &measurements.id);
+        debug!("Got: {:?}", measurements);
 
         info!("Subscribing to notifications");
-        let mut events = session
-            .characteristic_event_stream(&measurements.id)
-            .await?;
-        session.start_notify(&measurements.id).await?;
+        let mut events = measurements.subscribe().await?;
 
         info!("Processing notifications");
         let mut records = Vec::new();
         let mut prev_timestamp = NaiveDateTime::from_timestamp(0, 0);
         let mut timestamp_duplicate_count = 0;
-        let raw_mac_address: [u8; 6] = self.device_info.mac_address.into();
-        while let Ok(Some(bt_event)) = timeout(Duration::from_millis(5000), events.next()).await {
-            if let BluetoothEvent::Characteristic {
-                event: CharacteristicEvent::Value { value },
-                ..
-            } = bt_event
-            {
-                let mut record = Self::read_record(value, raw_mac_address.into());
-                if record.timestamp == prev_timestamp {
-                    timestamp_duplicate_count += 1;
-                    record.timestamp =
-                        record.timestamp + chrono::Duration::seconds(timestamp_duplicate_count);
-                } else {
-                    timestamp_duplicate_count = 0;
-                    prev_timestamp = record.timestamp.clone();
-                }
-                records.push(record);
+        while let Ok(Some(event)) = timeout(Duration::from_millis(5000), events.next()).await {
+            let mut record = Self::read_record(event.value, self.ble_device.mac_address());
+            if record.timestamp == prev_timestamp {
+                timestamp_duplicate_count += 1;
+                record.timestamp =
+                    record.timestamp + chrono::Duration::seconds(timestamp_duplicate_count);
+            } else {
+                timestamp_duplicate_count = 0;
+                prev_timestamp = record.timestamp.clone();
             }
+            records.push(record);
         }
         debug!("Processed all events, produced {} records", records.len());
 
         Ok(records)
     }
 
-    fn get_device_info(&self) -> &DeviceInfo {
-        &self.device_info
+    fn get_ble_device(&self) -> &dyn BleDevice {
+        &*self.ble_device
     }
 }
 

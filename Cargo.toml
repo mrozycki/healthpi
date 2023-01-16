@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "healthpi-bt",
     "healthpi-db",
     "healthpi-loader"
 ]

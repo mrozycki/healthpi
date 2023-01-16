@@ -4,8 +4,8 @@ use std::str::FromStr;
 use std::{collections::HashSet, error::Error, fs::File};
 
 use async_trait::async_trait;
-use bluez_async::{BluetoothSession, DeviceId, DeviceInfo, MacAddress};
 use chrono::{DateTime, Local, Utc};
+use healthpi_bt::{BleDevice, MacAddress};
 use log::{debug, info, warn};
 
 use healthpi_db::measurement::Record;
@@ -14,44 +14,36 @@ use super::{contour, soehnle};
 
 #[async_trait]
 pub trait Device {
-    async fn connect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>>;
-    async fn disconnect(&self, session: &BluetoothSession) -> Result<(), Box<dyn Error>>;
-    async fn get_data(&self, session: &BluetoothSession) -> Result<Vec<Record>, Box<dyn Error>>;
-    fn get_device_info(&self) -> &DeviceInfo;
-}
-
-pub fn display_device(device_info: &DeviceInfo) -> String {
-    device_info
-        .name
-        .as_ref()
-        .unwrap_or(&device_info.mac_address.to_string())
-        .to_owned()
+    async fn connect(&self) -> Result<(), Box<dyn Error>>;
+    async fn disconnect(&self) -> Result<(), Box<dyn Error>>;
+    async fn get_data(&self) -> Result<Vec<Record>, Box<dyn Error>>;
+    fn get_ble_device(&self) -> &dyn BleDevice;
 }
 
 struct BackoffTable {
-    expiry_timestamps: HashMap<DeviceId, DateTime<Utc>>,
+    expiry_timestamps: HashMap<MacAddress, DateTime<Utc>>,
 }
 
 impl BackoffTable {
     fn new() -> Self {
         Self {
-            expiry_timestamps: HashMap::<DeviceId, DateTime<Utc>>::new(),
+            expiry_timestamps: HashMap::<MacAddress, DateTime<Utc>>::new(),
         }
     }
 
-    fn check(&self, device_id: &DeviceId) -> bool {
+    fn check(&self, device: &dyn BleDevice) -> bool {
         self.expiry_timestamps
-            .get(device_id)
+            .get(&device.mac_address())
             .filter(|expiry| expiry > &&chrono::Utc::now())
             .is_some()
     }
 
-    fn mark(&mut self, device_id: &DeviceId) -> DateTime<Utc> {
+    fn mark(&mut self, device: &dyn BleDevice) -> DateTime<Utc> {
         let backoff_expiry = chrono::Utc::now()
             .checked_add_signed(chrono::Duration::minutes(5))
             .unwrap();
         self.expiry_timestamps
-            .insert(device_id.clone(), backoff_expiry);
+            .insert(device.mac_address(), backoff_expiry);
         backoff_expiry
     }
 }
@@ -84,41 +76,37 @@ impl Factory {
         Ok(Self::new(paired_devices))
     }
 
-    pub fn make_device(&self, device_info: DeviceInfo) -> Option<Box<dyn Device>> {
-        if device_info.rssi.is_none() {
+    pub fn make_device(&self, ble_device: Box<dyn BleDevice>) -> Option<Box<dyn Device>> {
+        if !ble_device.in_range() {
             None
-        } else if !self.paired_devices.contains(&device_info.mac_address) {
+        } else if !self.paired_devices.contains(&ble_device.mac_address()) {
             None
-        } else if self.backoff_table.check(&device_info.id) {
+        } else if self.backoff_table.check(&*ble_device) {
             debug!(
                 "Found device {}, ignoring because of backoff",
-                display_device(&device_info)
+                ble_device.name()
             );
             None
-        } else if let Some(name) = &device_info.name {
-            if name.contains("Contour") {
-                Some(Box::new(contour::ElitePlus::new(device_info)))
-            } else if name.contains("Shape200") {
-                Some(Box::new(soehnle::Shape200::new(device_info)))
-            } else if name.contains("Systo MC 400") {
-                Some(Box::new(soehnle::SystoMC400::new(device_info)))
-            } else {
-                warn!(
-                    "Device with MAC={} is not of any supported types",
-                    device_info.mac_address
-                );
-                None
-            }
+        } else if ble_device.name().contains("Contour") {
+            Some(Box::new(contour::ElitePlus::new(ble_device)))
+        } else if ble_device.name().contains("Shape200") {
+            Some(Box::new(soehnle::Shape200::new(ble_device)))
+        } else if ble_device.name().contains("Systo MC 400") {
+            Some(Box::new(soehnle::SystoMC400::new(ble_device)))
         } else {
+            warn!(
+                "Device with MAC={} is not of any supported types",
+                ble_device.mac_address()
+            );
             None
         }
     }
 
     pub fn mark_processed(&mut self, device: &dyn Device) -> DateTime<Utc> {
-        let expiry = self.backoff_table.mark(&device.get_device_info().id);
+        let expiry = self.backoff_table.mark(device.get_ble_device());
         info!(
             "Ignoring device {} until {}",
-            display_device(device.get_device_info()),
+            device.get_ble_device().name(),
             expiry.with_timezone(&Local)
         );
         expiry
