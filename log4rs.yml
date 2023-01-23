@@ -21,3 +21,5 @@ root:
 loggers:
   serde_xml_rs::de:
     level: error
+  sqlx::query:
+    level: error

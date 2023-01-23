@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log4rs::init_file("log4rs.yml", Default::default())?;
 
     info!("Connecting to database");
-    let conn = Connection::establish()?;
+    let conn = Connection::establish().await?;
     let measurement_repository = Box::new(MeasurementRepositoryImpl::new(conn.clone()));
 
     info!("Starting Bluetooth session");
