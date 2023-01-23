@@ -3,16 +3,15 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use diesel::RunQueryDsl;
+use async_trait::async_trait;
 use log::debug;
 use rustc_hash::FxHasher;
+use sqlx::QueryBuilder;
 
 use crate::measurement::{Record, Value};
 
-use super::{connection::Connection, schema::*};
+use super::connection::Connection;
 
-#[derive(Insertable)]
-#[table_name = "records"]
 pub struct NewRecord {
     record_ref: Vec<u8>,
     timestamp: i64,
@@ -41,8 +40,6 @@ impl Into<(NewRecord, Vec<NewValue>)> for Record {
     }
 }
 
-#[derive(Insertable)]
-#[table_name = "record_values"]
 pub struct NewValue {
     record_ref: Vec<u8>,
     value_type: i32,
@@ -61,8 +58,9 @@ impl NewValue {
 }
 
 #[mockall::automock]
+#[async_trait]
 pub trait MeasurementRepository: Send + Sync {
-    fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>>;
+    async fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>>;
 }
 
 pub struct MeasurementRepositoryImpl {
@@ -75,30 +73,40 @@ impl MeasurementRepositoryImpl {
     }
 }
 
+#[async_trait]
 impl MeasurementRepository for MeasurementRepositoryImpl {
-    fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>> {
-        mod record_values {
-            pub use crate::db::schema::record_values::dsl::*;
-        }
-        mod records {
-            pub use crate::db::schema::records::dsl::*;
-        }
-
+    async fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>> {
         debug!("Converting records");
         let (new_records, new_values_vecs): (Vec<NewRecord>, Vec<Vec<NewValue>>) =
             records.into_iter().map(Into::into).unzip();
         let new_values: Vec<NewValue> = new_values_vecs.into_iter().flatten().collect();
 
-        let mut conn = self.connection.lock().map_err(|e| e.to_string())?;
+        let mut conn = self.connection.lock().await;
+
         debug!("Storing records");
-        diesel::replace_into(records::records)
-            .values(new_records)
-            .execute(&mut *conn)?;
+        QueryBuilder::new("INSERT INTO records(timestamp, source, record_ref) ")
+            .push_values(new_records, |mut b, record| {
+                b.push_bind(record.timestamp)
+                    .push_bind(record.source)
+                    .push_bind(record.record_ref);
+            })
+            .push(" ON CONFLICT DO NOTHING ")
+            .build()
+            .execute(&mut *conn)
+            .await?;
 
         debug!("Storing values");
-        diesel::replace_into(record_values::record_values)
-            .values(new_values)
-            .execute(&mut *conn)?;
+        QueryBuilder::new("INSERT INTO record_values(record_ref, value, value_type) ")
+            .push_values(new_values, |mut b, value| {
+                b.push_bind(value.record_ref)
+                    .push_bind(value.value)
+                    .push_bind(value.value_type);
+            })
+            .push(" ON CONFLICT DO UPDATE SET value=excluded.value ")
+            .build()
+            .execute(&mut *conn)
+            .await?;
+
         Ok(())
     }
 }

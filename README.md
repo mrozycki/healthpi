@@ -45,30 +45,30 @@ to be done one per device.
 
 ### Database setup
 
-HealthPi uses [diesel](https://diesel.rs) to manage database migrations.
+HealthPi uses [migrant](https://crates.io/crates/migrant) to manage database migrations.
 At this point, you need to run the migrations manually. In order to do that,
-you will have to install `diesel_cli` with sqlite enabled. This also requires
+you will have to install `migrant` cli with sqlite enabled. This also requires
 `sqlite3` to be installed.
 
 ```
 sudo apt install sqlite3 libsqlite3-dev
-cargo install diesel_cli --no-default-features --features sqlite 
-```
-
-After the tools are installed, you need to create a `.env` file with
-a `DATABASE_URL` variable set, pointing to an sqlite database file. The name
-of the file does not matter, as both `diesel_cli` and HealthPi read it from
-the same `.env` file. While you can use a relative path, we suggest providing
-an absolute path.
-
-```
-echo DATABASE_URL=/home/pi/healthpi/healthpi.db > .env
+cargo install migrant --features sqlite
 ```
 
 After that you run the migration by simply executing:
 
 ```
-cd healthpi-db; diesel migration run; cd ..
+cd healthpi-db; migrant setup; migrant apply; cd ..
+```
+
+You will also need to point healthpi-loader to the correct database by setting
+an appropriate environment variable. The easiest way to do that is to create
+a `.env` file with a `DATABASE_URL` variable set, pointing to an sqlite database
+file. By default, `migrant` creates the database in the project root in a file
+called `healthpi.db`. We suggest specifying an absolute path, like this:
+
+```
+echo DATABASE_URL=/home/pi/healthpi/healthpi.db > .env
 ```
 
 Local development setup

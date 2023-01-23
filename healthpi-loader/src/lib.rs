@@ -82,7 +82,7 @@ impl Loader {
                 device.disconnect().await?;
 
                 info!("Storing records in database");
-                if let Err(e) = self.repository.store_records(records) {
+                if let Err(e) = self.repository.store_records(records).await {
                     error!("Failed to store records in database, skipping. {}", e);
                     continue;
                 }
