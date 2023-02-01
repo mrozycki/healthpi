@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
+env:
+  DATABASE_URL: sqlite:${{ github.workspace }}/healthpi.db
     
 jobs:
   build:
@@ -12,7 +15,10 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install dependencies
-      run: sudo apt install libdbus-1-dev pkg-config
+      run: sudo apt install libdbus-1-dev pkg-config && cargo install migrant --features sqlite
+    - name: Run migration
+      working-directory: healthpi-db
+      run: migrant setup && migrant apply
     - name: Build
       run: cargo build --verbose
     - name: Run tests

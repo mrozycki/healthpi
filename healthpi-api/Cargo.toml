@@ -1,0 +1,11 @@
+[package]
+name = "healthpi-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+healthpi-db = { path = "../healthpi-db" }
+
+actix-web = "4.3.0"
+log = "0.4.17"
+log4rs = "1.2.0"

@@ -4,9 +4,11 @@ use std::{
 };
 
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
+use itertools::Itertools;
 use log::debug;
 use rustc_hash::FxHasher;
-use sqlx::QueryBuilder;
+use sqlx::{query, QueryBuilder};
 
 use crate::measurement::{Record, Value};
 
@@ -61,8 +63,10 @@ impl NewValue {
 #[async_trait]
 pub trait MeasurementRepository: Send + Sync {
     async fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>>;
+    async fn fetch_records(&self) -> Result<Vec<Record>, Box<dyn Error>>;
 }
 
+#[derive(Clone)]
 pub struct MeasurementRepositoryImpl {
     connection: Connection,
 }
@@ -87,7 +91,7 @@ impl MeasurementRepository for MeasurementRepositoryImpl {
         QueryBuilder::new("INSERT INTO records(timestamp, source, record_ref) ")
             .push_values(new_records, |mut b, record| {
                 b.push_bind(record.timestamp)
-                    .push_bind(record.source)
+                    .push_bind(ron::to_string(&record.source).unwrap())
                     .push_bind(record.record_ref);
             })
             .push(" ON CONFLICT DO NOTHING ")
@@ -108,5 +112,35 @@ impl MeasurementRepository for MeasurementRepositoryImpl {
             .await?;
 
         Ok(())
+    }
+
+    async fn fetch_records(&self) -> Result<Vec<Record>, Box<dyn Error>> {
+        let mut conn = self.connection.lock().await;
+        query!(
+            r#"SELECT timestamp, source, value, value_type
+            FROM records, record_values 
+            WHERE records.record_ref = record_values.record_ref
+            ORDER BY timestamp DESC, source"#
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .group_by(|s| (s.timestamp, s.source.clone()))
+        .into_iter()
+        .map(
+            |((timestamp, source), values)| -> Result<_, Box<dyn Error>> {
+                Ok(Record::new(
+                    NaiveDateTime::from_timestamp_opt(timestamp, 0)
+                        .ok_or_else(|| format!("Invalid timestamp: {}", timestamp))?,
+                    values
+                        .into_iter()
+                        .map(|s| (s.value_type as usize, s.value).try_into().unwrap())
+                        .collect(),
+                    Vec::new(),
+                    ron::from_str(&source)?,
+                ))
+            },
+        )
+        .collect()
     }
 }

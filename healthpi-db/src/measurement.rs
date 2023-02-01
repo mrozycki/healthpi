@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use healthpi_bt::MacAddress;
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, FromPrimitive, PartialEq)]
 pub enum ValueType {
@@ -18,7 +19,7 @@ pub enum ValueType {
     HeartRate,
 }
 
-#[derive(Debug, FromPrimitive, PartialEq)]
+#[derive(Debug, FromPrimitive, PartialEq, Serialize)]
 pub enum MealIndicator {
     NoIndication,
     NoMeal,
@@ -26,8 +27,7 @@ pub enum MealIndicator {
     AfterMeal,
 }
 
-#[derive(Debug, PartialEq)]
-#[allow(dead_code)]
+#[derive(Debug, PartialEq, Serialize)]
 pub enum Value {
     Weight(f64),
     BodyMassIndex(f64),
@@ -87,13 +87,13 @@ impl TryFrom<(usize, f64)> for Value {
     }
 }
 
-#[derive(Debug, Hash, PartialEq)]
+#[derive(Debug, Hash, PartialEq, Deserialize, Serialize)]
 pub enum Source {
     Device(MacAddress),
+    Unknown(String),
 }
 
-#[derive(Debug, PartialEq)]
-#[allow(dead_code)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Record {
     pub timestamp: NaiveDateTime,
     pub values: Vec<Value>,
