@@ -4,7 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use log::debug;
+use log::{debug, info};
 use rustc_hash::FxHasher;
 use sqlx::QueryBuilder;
 
@@ -76,6 +76,10 @@ impl MeasurementRepositoryImpl {
 #[async_trait]
 impl MeasurementRepository for MeasurementRepositoryImpl {
     async fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>> {
+        if records.is_empty() {
+            info!("No records to store, returning");
+            return Ok(());
+        }
         debug!("Converting records");
         let (new_records, new_values_vecs): (Vec<NewRecord>, Vec<Vec<NewValue>>) =
             records.into_iter().map(Into::into).unzip();

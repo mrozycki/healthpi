@@ -6,6 +6,7 @@ use bluez_async::{
     DeviceId, DeviceInfo, DiscoveryFilter, Transport, WriteOptions, WriteType,
 };
 use futures::{lock::Mutex, stream, Stream, StreamExt};
+use log::debug;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -75,6 +76,7 @@ impl fmt::Display for DeviceError {
 
 impl Error for DeviceError {}
 
+#[derive(Debug)]
 pub struct BleCharacteristicEvent {
     pub value: Vec<u8>,
 }
@@ -133,6 +135,8 @@ impl BleCharacteristic for BleCharacteristicImpl {
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = BleCharacteristicEvent> + Send + Sync>>, DeviceError>
     {
+        debug!("Subscribing to {:?}", self.info.uuid);
+        let uuid = self.info.uuid.clone();
         let events = self
             .session
             .lock()
@@ -140,7 +144,13 @@ impl BleCharacteristic for BleCharacteristicImpl {
             .characteristic_event_stream(&self.info.id)
             .await
             .map_err(DeviceError::BluezError)?
-            .flat_map(|event| stream::iter(BleCharacteristicEvent::new(event)));
+            .flat_map(|event| stream::iter(BleCharacteristicEvent::new(event)))
+            .inspect(move |event| {
+                debug!(
+                    "Received event on characteristic {:?}: {:02X?}",
+                    uuid, event.value
+                )
+            });
 
         self.session
             .lock()
@@ -153,6 +163,10 @@ impl BleCharacteristic for BleCharacteristicImpl {
     }
 
     async fn write(&self, bytes: Vec<u8>) -> Result<(), DeviceError> {
+        debug!(
+            "Writing to characteristic {:?}: {:02X?}",
+            self.info.uuid, bytes
+        );
         self.session
             .lock()
             .await
@@ -162,6 +176,10 @@ impl BleCharacteristic for BleCharacteristicImpl {
     }
 
     async fn write_with_response(&self, bytes: Vec<u8>) -> Result<(), DeviceError> {
+        debug!(
+            "Writing with response to characteristic {:?}: {:02X?}",
+            self.info.uuid, bytes
+        );
         self.session
             .lock()
             .await
@@ -195,7 +213,7 @@ pub trait BleDevice: Send + Sync {
 
     fn in_range(&self) -> bool;
     fn mac_address(&self) -> MacAddress;
-    fn name(&self) -> String;
+    fn display_name(&self) -> &str;
 
     async fn get_characteristic(
         &self,
@@ -206,6 +224,7 @@ pub trait BleDevice: Send + Sync {
 
 pub struct BleDeviceImpl {
     session: Arc<Mutex<BluetoothSession>>,
+    display_name: String,
     device_info: DeviceInfo,
 }
 
@@ -213,6 +232,10 @@ impl BleDeviceImpl {
     fn new(session: Arc<Mutex<BluetoothSession>>, device_info: DeviceInfo) -> Self {
         Self {
             session,
+            display_name: device_info
+                .name
+                .clone()
+                .unwrap_or(device_info.mac_address.to_string()),
             device_info,
         }
     }
@@ -221,31 +244,23 @@ impl BleDeviceImpl {
 #[async_trait]
 impl BleDevice for BleDeviceImpl {
     async fn connect(&self) -> Result<(), DeviceError> {
-        if let Err(e) = self
-            .session
+        debug!("Connecting to {:?}", self.device_info.mac_address);
+        self.session
             .lock()
             .await
             .connect(&self.device_info.id)
             .await
-        {
-            Err(DeviceError::ConnectionFailure(e.to_string()))
-        } else {
-            Ok(())
-        }
+            .map_err(|e| DeviceError::ConnectionFailure(e.to_string()))
     }
 
     async fn disconnect(&self) -> Result<(), DeviceError> {
-        if let Err(e) = self
-            .session
+        debug!("Disconnecting from {:?}", self.device_info.mac_address);
+        self.session
             .lock()
             .await
             .disconnect(&self.device_info.id)
             .await
-        {
-            Err(DeviceError::ConnectionFailure(e.to_string()))
-        } else {
-            Ok(())
-        }
+            .map_err(|e| DeviceError::ConnectionFailure(e.to_string()))
     }
 
     fn in_range(&self) -> bool {
@@ -257,11 +272,8 @@ impl BleDevice for BleDeviceImpl {
         raw_mac_address.into()
     }
 
-    fn name(&self) -> String {
-        self.device_info
-            .name
-            .clone()
-            .unwrap_or(self.mac_address().to_string())
+    fn display_name(&self) -> &str {
+        &self.display_name
     }
 
     async fn get_characteristic(

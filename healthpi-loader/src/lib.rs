@@ -53,10 +53,7 @@ impl Loader {
                     continue;
                 };
 
-                info!(
-                    "Found device {}, connecting",
-                    device.get_ble_device().name()
-                );
+                info!("Found device {}, connecting", device.get_device_name());
                 if let Err(e) = device.connect().await {
                     error!("Failed to connect, skipping: {:?}", e);
                     continue;

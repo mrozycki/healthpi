@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, error::Error, time::Duration};
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use healthpi_bt::BleDevice;
+use healthpi_bt::{BleDevice, MacAddress};
 use healthpi_db::measurement::{MealIndicator, Record, Source, Value};
 use log::{debug, info};
 use tokio::time::timeout;
@@ -40,8 +40,12 @@ impl Device for ElitePlus {
         Ok(())
     }
 
-    fn get_ble_device(&self) -> &dyn BleDevice {
-        &*self.ble_device
+    fn get_device_name(&self) -> &str {
+        &self.ble_device.display_name()
+    }
+
+    fn get_device_address(&self) -> MacAddress {
+        self.ble_device.mac_address()
     }
 
     async fn get_data(&self) -> Result<Vec<Record>, Box<dyn std::error::Error>> {

@@ -503,6 +503,7 @@ dependencies = [
  "async-trait",
  "bluez-async",
  "futures",
+ "log",
  "mockall",
  "uuid",
 ]

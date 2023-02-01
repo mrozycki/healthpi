@@ -42,8 +42,12 @@ impl Device for Shape200 {
         Ok(())
     }
 
-    fn get_ble_device(&self) -> &dyn BleDevice {
-        &*self.ble_device
+    fn get_device_name(&self) -> &str {
+        &self.ble_device.display_name()
+    }
+
+    fn get_device_address(&self) -> MacAddress {
+        self.ble_device.mac_address()
     }
 
     async fn get_data(&self) -> Result<Vec<Record>, Box<dyn std::error::Error>> {
@@ -278,8 +282,12 @@ impl Device for SystoMC400 {
         Ok(records)
     }
 
-    fn get_ble_device(&self) -> &dyn BleDevice {
-        &*self.ble_device
+    fn get_device_name(&self) -> &str {
+        self.ble_device.display_name()
+    }
+
+    fn get_device_address(&self) -> MacAddress {
+        self.ble_device.mac_address()
     }
 }
 
