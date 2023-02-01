@@ -6,6 +6,7 @@ use bluez_async::{
     DeviceId, DeviceInfo, DiscoveryFilter, Transport, WriteOptions, WriteType,
 };
 use futures::{lock::Mutex, stream, Stream, StreamExt};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -36,6 +37,27 @@ impl From<[u8; 6]> for MacAddress {
 impl From<MacAddress> for [u8; 6] {
     fn from(mac: MacAddress) -> Self {
         mac.0
+    }
+}
+
+impl Serialize for MacAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for MacAddress {
+    fn deserialize<D>(deserializer: D) -> Result<MacAddress, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(
+            MacAddress::from_str(Deserialize::deserialize(deserializer)?)
+                .map_err(|e| serde::de::Error::custom(e))?,
+        )
     }
 }
 
