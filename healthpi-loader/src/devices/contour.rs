@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, error::Error, time::Duration};
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use healthpi_bt::BleDevice;
+use healthpi_bt::{BleCharacteristicEvent, BleDevice};
 use healthpi_db::measurement::{MealIndicator, Record, Source, Value};
 use log::{debug, info};
 use tokio::time::timeout;
@@ -25,6 +25,24 @@ pub struct ElitePlus {
 impl ElitePlus {
     pub fn new(ble_device: Box<dyn BleDevice>) -> Self {
         Self { ble_device }
+    }
+
+    fn read_record(&self, event: BleCharacteristicEvent) -> Option<(u16, Record)> {
+        if event.value.len() < 13 {
+            return None;
+        }
+        let sequence_number = u16::from_be_bytes([event.value[2], event.value[1]]);
+        let timestamp = utils::naive_date_time_from_le_bytes(&event.value[3..10])?;
+        let glucose = u16::from_be_bytes([event.value[11], event.value[12]]);
+        Some((
+            sequence_number,
+            Record::new(
+                timestamp,
+                vec![Value::Glucose(glucose as i32)],
+                event.value,
+                Source::Device(self.ble_device.mac_address()),
+            ),
+        ))
     }
 }
 
@@ -70,19 +88,9 @@ impl Device for ElitePlus {
         info!("Processing measurement notifications");
         while let Ok(Some(event)) = timeout(Duration::from_secs(1), measurement_events.next()).await
         {
-            let sequence_number = u16::from_be_bytes([event.value[2], event.value[1]]);
-            let timestamp = utils::naive_date_time_from_le_bytes(&event.value[3..10]);
-
-            let glucose = u16::from_be_bytes([event.value[11], event.value[12]]);
-            records.insert(
-                sequence_number,
-                Record::new(
-                    timestamp,
-                    vec![Value::Glucose(glucose as i32)],
-                    event.value,
-                    Source::Device(self.ble_device.mac_address()),
-                ),
-            );
+            if let Some((sequence_number, record)) = self.read_record(event) {
+                records.insert(sequence_number, record);
+            }
         }
 
         info!("Processing context notifications");
