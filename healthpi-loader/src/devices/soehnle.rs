@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
-use healthpi_bt::{BleDevice, MacAddress};
+use healthpi_bt::{BleCharacteristicEvent, BleDevice, MacAddress};
 use healthpi_db::measurement::{Record, Source, Value};
 use healthpi_db::user::User;
 use log::{debug, info};
@@ -27,6 +27,36 @@ pub struct Shape200 {
 impl Shape200 {
     pub fn new(ble_device: Box<dyn BleDevice>) -> Self {
         Self { ble_device }
+    }
+
+    fn read_record(&self, user: &User, event: BleCharacteristicEvent) -> Option<Record> {
+        if event.value.len() != 15 {
+            return None;
+        }
+        let timestamp = utils::naive_date_time_from_be_bytes(&event.value[2..9])?;
+
+        let weight = u16::from_be_bytes([event.value[9], event.value[10]]) as f64 / 10.0;
+        let mut values = vec![
+            Value::Weight(weight),
+            Value::BodyMassIndex(get_body_mass_index(user, weight)),
+            Value::BasalMetabolicRate(get_basal_metabolic_rate(user, weight)),
+        ];
+
+        let imp5 = u16::from_be_bytes([event.value[11], event.value[12]]) as f64;
+        let imp50 = u16::from_be_bytes([event.value[13], event.value[14]]) as f64;
+        if imp50 > 0.0 {
+            values.append(&mut vec![
+                Value::FatPercent(get_fat_percentage(user, weight, imp50)),
+                Value::WaterPercent(get_water_percentage(user, weight, imp50)),
+                Value::MusclePercent(get_muscle_percentage(user, weight, imp5, imp50)),
+            ]);
+        }
+        Some(Record::new(
+            timestamp,
+            values,
+            event.value,
+            Source::Device(self.ble_device.mac_address()),
+        ))
     }
 }
 
@@ -82,32 +112,8 @@ impl Device for Shape200 {
         info!("Processing measurement notifications");
         let mut records = Vec::new();
         while let Ok(Some(event)) = timeout(Duration::from_millis(1000), events.next()).await {
-            if event.value.len() == 15 {
-                let timestamp = utils::naive_date_time_from_be_bytes(&event.value[2..9]);
-
-                let weight = u16::from_be_bytes([event.value[9], event.value[10]]) as f64 / 10.0;
-                let mut values = vec![
-                    Value::Weight(weight),
-                    Value::BodyMassIndex(get_body_mass_index(&user, weight)),
-                    Value::BasalMetabolicRate(get_basal_metabolic_rate(&user, weight)),
-                ];
-
-                let imp5 = u16::from_be_bytes([event.value[11], event.value[12]]) as f64;
-                let imp50 = u16::from_be_bytes([event.value[13], event.value[14]]) as f64;
-                if imp50 > 0.0 {
-                    values.append(&mut vec![
-                        Value::FatPercent(get_fat_percentage(&user, weight, imp50)),
-                        Value::WaterPercent(get_water_percentage(&user, weight, imp50)),
-                        Value::MusclePercent(get_muscle_percentage(&user, weight, imp5, imp50)),
-                    ]);
-                }
-
-                records.push(Record::new(
-                    timestamp,
-                    values,
-                    event.value,
-                    Source::Device(self.ble_device.mac_address()),
-                ))
+            if let Some(record) = self.read_record(&user, event) {
+                records.push(record);
             }
         }
         debug!("Processed all events, produced {} records", records.len());
@@ -193,7 +199,7 @@ impl SystoMC400 {
         Self { ble_device }
     }
 
-    fn read_record(raw_data: Vec<u8>, mac_address: MacAddress) -> Record {
+    fn read_record(raw_data: Vec<u8>, mac_address: MacAddress) -> Option<Record> {
         let mut i = 1;
 
         let mut values = Vec::new();
@@ -213,7 +219,7 @@ impl SystoMC400 {
         let timestamp = if raw_data[0] & 2 == 0 {
             Utc::now().naive_local()
         } else {
-            let t = utils::naive_date_time_from_le_bytes(&raw_data[i..i + 7]);
+            let t = utils::naive_date_time_from_le_bytes(&raw_data[i..i + 7])?;
             i += 7;
             t
         };
@@ -225,12 +231,12 @@ impl SystoMC400 {
 
         let raw_mac_address: [u8; 6] = mac_address.into();
 
-        Record::new(
+        Some(Record::new(
             timestamp,
             values,
             raw_data,
             Source::Device(raw_mac_address.into()),
-        )
+        ))
     }
 }
 
@@ -259,19 +265,21 @@ impl Device for SystoMC400 {
 
         info!("Processing notifications");
         let mut records = Vec::new();
-        let mut prev_timestamp = NaiveDateTime::from_timestamp(0, 0);
+        let mut prev_timestamp = NaiveDateTime::MIN;
         let mut timestamp_duplicate_count = 0;
         while let Ok(Some(event)) = timeout(Duration::from_millis(5000), events.next()).await {
-            let mut record = Self::read_record(event.value, self.ble_device.mac_address());
-            if record.timestamp == prev_timestamp {
-                timestamp_duplicate_count += 1;
-                record.timestamp =
-                    record.timestamp + chrono::Duration::seconds(timestamp_duplicate_count);
-            } else {
-                timestamp_duplicate_count = 0;
-                prev_timestamp = record.timestamp.clone();
+            if let Some(mut record) = Self::read_record(event.value, self.ble_device.mac_address())
+            {
+                if record.timestamp == prev_timestamp {
+                    timestamp_duplicate_count += 1;
+                    record.timestamp =
+                        record.timestamp + chrono::Duration::seconds(timestamp_duplicate_count);
+                } else {
+                    timestamp_duplicate_count = 0;
+                    prev_timestamp = record.timestamp.clone();
+                }
+                records.push(record);
             }
-            records.push(record);
         }
         debug!("Processed all events, produced {} records", records.len());
 
@@ -297,8 +305,8 @@ mod tests {
         ];
         let expected = Record::new(
             NaiveDateTime::new(
-                NaiveDate::from_ymd(2022, 8, 4),
-                NaiveTime::from_hms(13, 49, 0),
+                NaiveDate::from_ymd_opt(2022, 8, 4).unwrap(),
+                NaiveTime::from_hms_opt(13, 49, 0).unwrap(),
             ),
             vec![
                 Value::BloodPressureSystolic(128),
@@ -309,7 +317,7 @@ mod tests {
             Source::Device(mac_address),
         );
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
 
         assert_eq!(record, expected);
     }
@@ -324,8 +332,8 @@ mod tests {
         ];
         let expected = Record::new(
             NaiveDateTime::new(
-                NaiveDate::from_ymd(2022, 8, 4),
-                NaiveTime::from_hms(13, 49, 0),
+                NaiveDate::from_ymd_opt(2022, 8, 4).unwrap(),
+                NaiveTime::from_hms_opt(13, 49, 0).unwrap(),
             ),
             vec![
                 Value::BloodPressureSystolic(128),
@@ -336,7 +344,7 @@ mod tests {
             Source::Device(mac_address),
         );
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
 
         assert_eq!(record, expected);
     }
@@ -351,7 +359,7 @@ mod tests {
             Value::HeartRate(80),
         ];
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
 
         assert_eq!(record.raw_data, raw_data);
         assert_eq!(record.source, Source::Device(mac_address));
@@ -364,8 +372,8 @@ mod tests {
         let raw_data = vec![26, 128, 0, 75, 0, 93, 0, 230, 7, 8, 4, 13, 49, 0, 0, 0, 0];
         let expected = Record::new(
             NaiveDateTime::new(
-                NaiveDate::from_ymd(2022, 8, 4),
-                NaiveTime::from_hms(13, 49, 0),
+                NaiveDate::from_ymd_opt(2022, 8, 4).unwrap(),
+                NaiveTime::from_hms_opt(13, 49, 0).unwrap(),
             ),
             vec![
                 Value::BloodPressureSystolic(128),
@@ -375,7 +383,7 @@ mod tests {
             Source::Device(mac_address),
         );
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address);
+        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
 
         assert_eq!(record, expected);
     }
