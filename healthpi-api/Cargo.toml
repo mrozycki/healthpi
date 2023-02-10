@@ -9,3 +9,4 @@ healthpi-db = { path = "../healthpi-db" }
 actix-web = "4.3.0"
 log = "0.4.17"
 log4rs = "1.2.0"
+serde = { version = "1.0.152", features = ["derive"] }

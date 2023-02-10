@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     error::Error,
     hash::{Hash, Hasher},
@@ -6,13 +7,27 @@ use std::{
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use itertools::Itertools;
-use log::debug;
+use log::{debug, error};
 use rustc_hash::FxHasher;
-use sqlx::{query, QueryBuilder};
+use sqlx::{sqlite::SqliteRow, FromRow, QueryBuilder, Row};
 
-use crate::measurement::{Record, Value};
+use crate::measurement::{Record, Source, Value, ValueType};
 
 use super::connection::Connection;
+
+#[derive(Debug)]
+pub enum DbError {
+    InvalidTimestamp,
+    InvalidValue,
+}
+
+impl fmt::Display for DbError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for DbError {}
 
 pub struct NewRecord {
     record_ref: Vec<u8>,
@@ -35,7 +50,7 @@ impl Into<(NewRecord, Vec<NewValue>)> for Record {
         let new_record = NewRecord {
             record_ref,
             timestamp: self.timestamp.timestamp(),
-            source: format!("{:?}", self.source),
+            source: ron::to_string(&self.source).unwrap(),
         };
 
         (new_record, new_values)
@@ -59,11 +74,46 @@ impl NewValue {
     }
 }
 
+pub struct RecordRow {
+    timestamp: NaiveDateTime,
+    source: Source,
+    value: Value,
+}
+
+impl<'r> FromRow<'r, SqliteRow> for RecordRow {
+    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
+        let timestamp = row.try_get("timestamp")?;
+        Ok(Self {
+            timestamp: NaiveDateTime::from_timestamp_opt(timestamp, 0).ok_or_else(|| {
+                sqlx::Error::ColumnDecode {
+                    index: "timestamp".into(),
+                    source: Box::new(DbError::InvalidTimestamp),
+                }
+            })?,
+            source: ron::from_str(row.try_get("source")?).map_err(|e| {
+                sqlx::Error::ColumnDecode {
+                    index: "source".into(),
+                    source: Box::new(e),
+                }
+            })?,
+            value: (
+                row.try_get::<u32, _>("value_type")? as usize,
+                row.try_get::<f64, _>("value")?,
+            )
+                .try_into()
+                .map_err(|_| sqlx::Error::ColumnDecode {
+                    index: "value".into(),
+                    source: Box::new(DbError::InvalidValue),
+                })?,
+        })
+    }
+}
+
 #[mockall::automock]
 #[async_trait]
 pub trait MeasurementRepository: Send + Sync {
     async fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>>;
-    async fn fetch_records(&self) -> Result<Vec<Record>, Box<dyn Error>>;
+    async fn fetch_records(&self, select: &[ValueType]) -> Result<Vec<Record>, Box<dyn Error>>;
 }
 
 #[derive(Clone)]
@@ -91,7 +141,7 @@ impl MeasurementRepository for MeasurementRepositoryImpl {
         QueryBuilder::new("INSERT INTO records(timestamp, source, record_ref) ")
             .push_values(new_records, |mut b, record| {
                 b.push_bind(record.timestamp)
-                    .push_bind(ron::to_string(&record.source).unwrap())
+                    .push_bind(record.source)
                     .push_bind(record.record_ref);
             })
             .push(" ON CONFLICT DO NOTHING ")
@@ -114,30 +164,37 @@ impl MeasurementRepository for MeasurementRepositoryImpl {
         Ok(())
     }
 
-    async fn fetch_records(&self) -> Result<Vec<Record>, Box<dyn Error>> {
+    async fn fetch_records(&self, select: &[ValueType]) -> Result<Vec<Record>, Box<dyn Error>> {
         let mut conn = self.connection.lock().await;
-        query!(
+        let mut query = QueryBuilder::new(
             r#"SELECT timestamp, source, value, value_type
             FROM records, record_values 
-            WHERE records.record_ref = record_values.record_ref
-            ORDER BY timestamp DESC, source"#
-        )
+            WHERE records.record_ref = record_values.record_ref "#,
+        );
+        if select.len() > 0 {
+            query
+                .push(" AND value_type IN ")
+                .push_tuples(select, |mut b, value| {
+                    b.push_bind(*value as u16);
+                })
+        } else {
+            &mut query
+        }
+        .push(" ORDER BY timestamp DESC, source ")
+        .build()
         .fetch_all(&mut *conn)
         .await?
-        .into_iter()
+        .iter()
+        .flat_map(|row| RecordRow::from_row(row).map_err(|e| error!("{}", e)).ok())
         .group_by(|s| (s.timestamp, s.source.clone()))
         .into_iter()
         .map(
             |((timestamp, source), values)| -> Result<_, Box<dyn Error>> {
                 Ok(Record::new(
-                    NaiveDateTime::from_timestamp_opt(timestamp, 0)
-                        .ok_or_else(|| format!("Invalid timestamp: {}", timestamp))?,
-                    values
-                        .into_iter()
-                        .map(|s| (s.value_type as usize, s.value).try_into().unwrap())
-                        .collect(),
+                    timestamp,
+                    values.into_iter().map(|r| r.value).collect(),
                     Vec::new(),
-                    ron::from_str(&source)?,
+                    source.clone(),
                 ))
             },
         )

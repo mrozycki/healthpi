@@ -3,8 +3,9 @@ use healthpi_bt::MacAddress;
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use serde::{Deserialize, Serialize};
+use strum::EnumString;
 
-#[derive(Debug, FromPrimitive, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumString, FromPrimitive, PartialEq, Deserialize)]
 pub enum ValueType {
     Weight,
     BodyMassIndex,
@@ -87,7 +88,7 @@ impl TryFrom<(usize, f64)> for Value {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Deserialize, Serialize)]
 pub enum Source {
     Device(MacAddress),
     Unknown(String),
