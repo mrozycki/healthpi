@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use actix_cors::Cors;
 use actix_web::{get, web, App, HttpServer, Responder};
 use healthpi_db::{
     db::{
@@ -49,7 +50,9 @@ async fn main() -> std::io::Result<()> {
     let measurement_repository = MeasurementRepositoryImpl::new(conn.clone());
 
     HttpServer::new(move || {
+        let cors = Cors::permissive();
         App::new()
+            .wrap(cors)
             .app_data(web::Data::new(measurement_repository.clone()))
             .service(index)
     })
