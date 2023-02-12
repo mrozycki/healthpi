@@ -44,7 +44,10 @@ impl Shape200 {
 
         let imp5 = u16::from_be_bytes([event.value[11], event.value[12]]) as f64;
         let imp50 = u16::from_be_bytes([event.value[13], event.value[14]]) as f64;
-        if imp50 > 0.0 {
+        if imp50 > 0.0 && imp50 < 1600.0 {
+            // The upper bound for imp50 is not exact. A value of 1600 would contribute 100%
+            // to the body fat calculation, so any value above that is likely a result
+            // of incorrect measurement.
             values.append(&mut vec![
                 Value::FatPercent(get_fat_percentage(user, weight, imp50)),
                 Value::WaterPercent(get_water_percentage(user, weight, imp50)),
