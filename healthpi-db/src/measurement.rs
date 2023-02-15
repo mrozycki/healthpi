@@ -3,6 +3,7 @@ use healthpi_bt::MacAddress;
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, EnumMap};
 use strum::EnumString;
 
 #[derive(Copy, Clone, Debug, EnumString, FromPrimitive, PartialEq, Deserialize)]
@@ -29,6 +30,7 @@ pub enum MealIndicator {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Value {
     Weight(f64),
     BodyMassIndex(f64),
@@ -94,9 +96,11 @@ pub enum Source {
     Unknown(String),
 }
 
+#[serde_as]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Record {
     pub timestamp: NaiveDateTime,
+    #[serde_as(as = "EnumMap")]
     pub values: Vec<Value>,
     pub raw_data: Vec<u8>,
     pub source: Source,
