@@ -1,9 +1,9 @@
-export interface Value {
-    Weight?: number,
-    FatPercent?: number,
+export interface Values {
+    weight?: number,
+    fatPercent?: number,
 }
 
 export interface Record {
     timestamp: string,
-    values: Value[],
+    values: Values,
 }
