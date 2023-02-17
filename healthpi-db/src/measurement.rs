@@ -21,7 +21,7 @@ pub enum ValueType {
     HeartRate,
 }
 
-#[derive(Debug, FromPrimitive, PartialEq, Serialize)]
+#[derive(Debug, FromPrimitive, PartialEq, Serialize, Deserialize)]
 pub enum MealIndicator {
     NoIndication,
     NoMeal,
@@ -29,7 +29,7 @@ pub enum MealIndicator {
     AfterMeal,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Value {
     Weight(f64),
@@ -97,7 +97,7 @@ pub enum Source {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Record {
     pub timestamp: NaiveDateTime,
     #[serde_as(as = "EnumMap")]

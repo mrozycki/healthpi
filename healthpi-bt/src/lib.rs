@@ -6,7 +6,7 @@ use bluez_async::{
     DeviceId, DeviceInfo, DiscoveryFilter, Transport, WriteOptions, WriteType,
 };
 use futures::{lock::Mutex, stream, Stream, StreamExt};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -54,10 +54,22 @@ impl<'de> Deserialize<'de> for MacAddress {
     where
         D: Deserializer<'de>,
     {
-        Ok(
-            MacAddress::from_str(Deserialize::deserialize(deserializer)?)
-                .map_err(|e| serde::de::Error::custom(e))?,
-        )
+        struct MacVisitor;
+        impl<'de> Visitor<'de> for MacVisitor {
+            type Value = MacAddress;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a string containing MAC address")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                MacAddress::from_str(v).map_err(|e| serde::de::Error::custom(e))
+            }
+        }
+        deserializer.deserialize_str(MacVisitor)
     }
 }
 
