@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { AppComponent } from './app.component';
 import { HttpClientModule } from '@angular/common/http';
 import { WeightChartComponent } from './weight-chart/weight-chart.component';
+import { GlucoseChartComponent } from './glucose-chart/glucose-chart.component';
 
 describe('AppComponent', () => {
   beforeEach(async () => {
@@ -9,7 +10,8 @@ describe('AppComponent', () => {
       imports: [HttpClientModule],
       declarations: [
         AppComponent,
-        WeightChartComponent
+        GlucoseChartComponent,
+        WeightChartComponent,
       ],
     }).compileComponents();
   });

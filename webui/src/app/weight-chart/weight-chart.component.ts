@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { ChartDataset, ChartOptions } from 'chart.js';
+import { ChartDataset, ChartOptions, ChartType } from 'chart.js';
 import { HealthpiService } from '../healthpi.service';
 import { Record } from '../records';
 import 'chartjs-adapter-moment';
@@ -18,10 +18,10 @@ export class WeightChartComponent implements OnInit {
   chartOptions: ChartOptions = {
     responsive: true,
     scales: {
-      yAxis: {
+      y: {
         min: 0,
       },
-      xAxis: {
+      x: {
         type: 'time',
         time: {
           displayFormats: {
@@ -31,7 +31,7 @@ export class WeightChartComponent implements OnInit {
       }
     },
   };
-  chartType = 'line';
+  chartType: ChartType = 'line';
 
   constructor(private healthpiService: HealthpiService) {
   }
@@ -58,7 +58,7 @@ export class WeightChartComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.healthpiService.getRecords().subscribe(records => this.updateData(records));
+    this.healthpiService.getRecords(["Weight", "FatPercent"]).subscribe(records => this.updateData(records));
   }
 
 }
