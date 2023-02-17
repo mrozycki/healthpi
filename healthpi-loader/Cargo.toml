@@ -16,7 +16,13 @@ log4rs = "1.1.1"
 tokio = { version = "1.17.0", features = ["macros", "rt", "rt-multi-thread"] }
 uuid = "1.1.2"
 mockall = "0.11.3"
+serde_json = "1.0.93"
+serde = "1.0.152"
 
 [[bin]]
 name = "loader-daemon"
 path = "src/daemon.rs"
+
+[[bin]]
+name = "load-json"
+path = "src/bin/load_json.rs"
