@@ -9,7 +9,7 @@ import { Record } from './records';
 export class HealthpiService {
   constructor(private http: HttpClient) { }
 
-  getRecords() {
-    return this.http.get<Record[]>('http://localhost:8080/?select=Weight,FatPercent');
+  getRecords(select: string[]) {
+    return this.http.get<Record[]>('http://localhost:8080/?select=' + select.join(','));
   }
 }
