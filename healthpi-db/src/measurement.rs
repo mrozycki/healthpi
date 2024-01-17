@@ -45,9 +45,9 @@ pub enum Value {
     HeartRate(i32),
 }
 
-impl Into<(usize, f64)> for Value {
-    fn into(self) -> (usize, f64) {
-        match self {
+impl From<Value> for (usize, f64) {
+    fn from(val: Value) -> Self {
+        match val {
             Value::Weight(x) => (ValueType::Weight as usize, x),
             Value::BodyMassIndex(x) => (ValueType::BodyMassIndex as usize, x),
             Value::BasalMetabolicRate(x) => (ValueType::BasalMetabolicRate as usize, x),
@@ -80,7 +80,7 @@ impl TryFrom<(usize, f64)> for Value {
             Some(ValueType::FatPercent) => Ok(Value::FatPercent(x)),
             Some(ValueType::Glucose) => Ok(Value::Glucose(x as i32)),
             Some(ValueType::Meal) => num::FromPrimitive::from_f64(x)
-                .map(|v| Value::Meal(v))
+                .map(Value::Meal)
                 .ok_or("Invalid meal indicator"),
             Some(ValueType::BloodPressureSystolic) => Ok(Value::BloodPressureSystolic(x as i32)),
             Some(ValueType::BloodPressureDiastolic) => Ok(Value::BloodPressureDiastolic(x as i32)),

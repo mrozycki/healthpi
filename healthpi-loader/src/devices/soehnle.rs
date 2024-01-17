@@ -275,11 +275,10 @@ impl Device for SystoMC400 {
             {
                 if record.timestamp == prev_timestamp {
                     timestamp_duplicate_count += 1;
-                    record.timestamp =
-                        record.timestamp + chrono::Duration::seconds(timestamp_duplicate_count);
+                    record.timestamp += chrono::Duration::seconds(timestamp_duplicate_count);
                 } else {
                     timestamp_duplicate_count = 0;
-                    prev_timestamp = record.timestamp.clone();
+                    prev_timestamp = record.timestamp
                 }
                 records.push(record);
             }

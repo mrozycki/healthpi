@@ -46,9 +46,9 @@ impl Loader {
         info!("Waiting for devices");
         while self.running.load(Ordering::Relaxed) {
             time::sleep(Duration::from_secs(1)).await;
-            let mut devices = self.ble_session.get_devices().await?.into_iter();
+            let devices = self.ble_session.get_devices().await?;
 
-            while let Some(ble_device) = devices.next() {
+            for ble_device in devices.into_iter() {
                 let Some(device) = self.factory.lock().await.make_device(ble_device) else {
                     continue;
                 };
