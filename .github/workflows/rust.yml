@@ -14,15 +14,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - name: Install Rust toolchain
+      id: toolchain
+      uses: dtolnay/rust-toolchain@1.74.1
+      with:
+          components: clippy, rustfmt
     - name: Install dependencies
       run: sudo apt install libdbus-1-dev pkg-config && cargo install migrant --features sqlite
     - name: Run migration
       working-directory: healthpi-db
       run: migrant setup && migrant apply
-    - name: Run format check
+    - name: Check formatting
       run: cargo fmt --check
-    - name: Clippy
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+          path: |
+              ~/.cargo/bin/
+              ~/.cargo/registry/index/
+              ~/.cargo/registry/cache/
+              ~/.cargo/git/db/
+              target/
+          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-rust-${{ steps.toolchain.outputs.cachekey }}
+    - name: Run clippy
       run: cargo clippy
     - name: Run tests
-      run: cargo test
+      run: cargo test --all-features
