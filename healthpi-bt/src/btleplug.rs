@@ -72,12 +72,12 @@ impl BleCharacteristic for BleCharacteristicImpl {
         Ok(Box::pin(events))
     }
 
-    async fn write(&self, bytes: Vec<u8>) -> Result<(), DeviceError> {
-        self.write_inner(&bytes, WriteType::WithoutResponse).await
+    async fn write(&self, bytes: &[u8]) -> Result<(), DeviceError> {
+        self.write_inner(bytes, WriteType::WithoutResponse).await
     }
 
-    async fn write_with_response(&self, bytes: Vec<u8>) -> Result<(), DeviceError> {
-        self.write_inner(&bytes, WriteType::WithResponse).await
+    async fn write_with_response(&self, bytes: &[u8]) -> Result<(), DeviceError> {
+        self.write_inner(bytes, WriteType::WithResponse).await
     }
 
     async fn read(&self) -> Result<Vec<u8>, DeviceError> {

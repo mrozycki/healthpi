@@ -92,9 +92,7 @@ impl Device for Shape200 {
 
         info!("Subscribing to notifications");
         let mut events = weight_characteristic.subscribe().await?;
-        cmd_characteristic
-            .write_with_response(vec![0x0c, 1])
-            .await?;
+        cmd_characteristic.write_with_response(&[0x0c, 1]).await?;
 
         info!("Reading user data");
         let user = if let Some(event) = events.next().await {
@@ -108,9 +106,7 @@ impl Device for Shape200 {
             panic!("Did not receive user data!")
         };
 
-        cmd_characteristic
-            .write_with_response(vec![0x09, 1])
-            .await?;
+        cmd_characteristic.write_with_response(&[0x09, 1]).await?;
 
         info!("Processing measurement notifications");
         let mut records = Vec::new();

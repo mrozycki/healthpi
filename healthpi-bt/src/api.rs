@@ -30,8 +30,8 @@ pub trait BleCharacteristic: Send + Sync + fmt::Debug {
     async fn subscribe(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = BleCharacteristicEvent> + Send>>, DeviceError>;
-    async fn write(&self, bytes: Vec<u8>) -> Result<(), DeviceError>;
-    async fn write_with_response(&self, bytes: Vec<u8>) -> Result<(), DeviceError>;
+    async fn write(&self, bytes: &[u8]) -> Result<(), DeviceError>;
+    async fn write_with_response(&self, bytes: &[u8]) -> Result<(), DeviceError>;
     async fn read(&self) -> Result<Vec<u8>, DeviceError>;
 }
 
