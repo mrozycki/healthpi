@@ -5,8 +5,14 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.56"
-bluez-async = "0.6.0"
+bluez-async = { version = "0.6.0", optional = true }
+btleplug = { version = "0.11.5", optional = true }
 futures = "0.3.21"
 mockall = "0.11.3"
 serde = { version = "1.0.152", features = ["derive"] }
 uuid = "1.1.2"
+
+[features]
+default = ["btleplug"]
+bluez = ["dep:bluez-async"]
+btleplug = ["dep:btleplug"]

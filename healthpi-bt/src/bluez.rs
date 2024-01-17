@@ -56,8 +56,7 @@ impl BleCharacteristicImpl {
 impl BleCharacteristic for BleCharacteristicImpl {
     async fn subscribe(
         &self,
-    ) -> Result<Pin<Box<dyn Stream<Item = BleCharacteristicEvent> + Send + Sync>>, DeviceError>
-    {
+    ) -> Result<Pin<Box<dyn Stream<Item = BleCharacteristicEvent> + Send>>, DeviceError> {
         let events = self
             .session
             .lock()
