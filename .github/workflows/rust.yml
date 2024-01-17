@@ -8,6 +8,7 @@ on:
 
 env:
   DATABASE_URL: sqlite:${{ github.workspace }}/healthpi.db
+  RUSTFLAGS: "-Dwarnings"
     
 jobs:
   build:
@@ -19,9 +20,9 @@ jobs:
     - name: Run migration
       working-directory: healthpi-db
       run: migrant setup && migrant apply
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
     - name: Run format check
       run: cargo fmt --check
+    - name: Clippy
+      run: cargo clippy
+    - name: Run tests
+      run: cargo test

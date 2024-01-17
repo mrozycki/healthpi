@@ -72,7 +72,7 @@ impl FactoryImpl {
         let file = File::open(path)?;
         let paired_devices: HashSet<MacAddress> = BufReader::new(file)
             .lines()
-            .filter_map(|l| l.ok())
+            .map_while(|l| l.ok())
             .map(|s| MacAddress::from_str(&s))
             .filter_map(|l| l.ok())
             .collect();
@@ -85,9 +85,7 @@ impl FactoryImpl {
 
 impl Factory for FactoryImpl {
     fn make_device(&self, ble_device: Box<dyn BleDevice>) -> Option<Box<dyn Device>> {
-        if !ble_device.in_range() {
-            None
-        } else if !self.paired_devices.contains(&ble_device.mac_address()) {
+        if !ble_device.in_range() || !self.paired_devices.contains(&ble_device.mac_address()) {
             None
         } else if self.backoff_table.check(&*ble_device) {
             debug!(

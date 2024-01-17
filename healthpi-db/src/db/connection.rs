@@ -4,7 +4,7 @@ use dotenv::dotenv;
 use sqlx::{Connection as SqlxConnection, Executor, SqliteConnection};
 use tokio::sync::{Mutex, MutexGuard};
 
-const SETUP_QUERY: &'static str = "PRAGMA mmap_size = 30000000000;
+const SETUP_QUERY: &str = "PRAGMA mmap_size = 30000000000;
 PRAGMA cache_size = -1000;
 PRAGMA page_size = 4096;
 PRAGMA journal_mode = WAL;
@@ -28,7 +28,7 @@ impl Connection {
         })
     }
 
-    pub async fn lock<'a>(&'a self) -> MutexGuard<'a, SqliteConnection> {
+    pub async fn lock(&self) -> MutexGuard<'_, SqliteConnection> {
         self.inner.lock().await
     }
 }

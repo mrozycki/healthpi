@@ -35,22 +35,22 @@ pub struct NewRecord {
     source: String,
 }
 
-impl Into<(NewRecord, Vec<NewValue>)> for Record {
-    fn into(self) -> (NewRecord, Vec<NewValue>) {
+impl From<Record> for (NewRecord, Vec<NewValue>) {
+    fn from(val: Record) -> Self {
         let mut hasher = FxHasher::default();
-        self.timestamp.hash(&mut hasher);
-        self.source.hash(&mut hasher);
+        val.timestamp.hash(&mut hasher);
+        val.source.hash(&mut hasher);
         let record_ref = hasher.finish().to_le_bytes().to_vec();
 
-        let new_values = self
+        let new_values = val
             .values
             .into_iter()
             .map(|value| NewValue::from_value(value, record_ref.clone()))
             .collect();
         let new_record = NewRecord {
             record_ref,
-            timestamp: self.timestamp.timestamp(),
-            source: ron::to_string(&self.source).unwrap(),
+            timestamp: val.timestamp.timestamp(),
+            source: ron::to_string(&val.source).unwrap(),
         };
 
         (new_record, new_values)
@@ -171,7 +171,7 @@ impl MeasurementRepository for MeasurementRepositoryImpl {
             FROM records, record_values 
             WHERE records.record_ref = record_values.record_ref "#,
         );
-        if select.len() > 0 {
+        if !select.is_empty() {
             query
                 .push(" AND value_type IN ")
                 .push_tuples(select, |mut b, value| {

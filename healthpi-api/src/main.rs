@@ -17,7 +17,7 @@ where
     D: de::Deserializer<'de>,
 {
     let s: &str = Deserialize::deserialize(deserializer)?;
-    s.split(",")
+    s.split(',')
         .map(|s| ValueType::from_str(s).map_err(|e| de::Error::custom(e.to_string())))
         .collect()
 }
