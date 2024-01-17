@@ -82,7 +82,7 @@ impl Device for ElitePlus {
         let mut context_events = contexts.subscribe().await?;
         let _ = racp.subscribe().await?;
 
-        racp.write(vec![1, 1]).await?;
+        racp.write(&[1, 1]).await?;
 
         let mut records = BTreeMap::<u16, Record>::new();
         info!("Processing measurement notifications");

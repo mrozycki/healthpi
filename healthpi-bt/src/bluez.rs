@@ -76,7 +76,7 @@ impl BleCharacteristic for BleCharacteristicImpl {
         Ok(Box::pin(events))
     }
 
-    async fn write(&self, bytes: Vec<u8>) -> Result<(), DeviceError> {
+    async fn write(&self, bytes: &[u8]) -> Result<(), DeviceError> {
         self.session
             .lock()
             .await
@@ -85,7 +85,7 @@ impl BleCharacteristic for BleCharacteristicImpl {
             .map_err(|e| DeviceError::BluetoothError(e.to_string()))
     }
 
-    async fn write_with_response(&self, bytes: Vec<u8>) -> Result<(), DeviceError> {
+    async fn write_with_response(&self, bytes: &[u8]) -> Result<(), DeviceError> {
         self.session
             .lock()
             .await
