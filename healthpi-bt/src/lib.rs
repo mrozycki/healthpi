@@ -9,7 +9,7 @@ mod btleplug;
 mod macaddress;
 
 pub use api::{
-    BleCharacteristic, BleCharacteristicEvent, BleDevice, BleSession, DeviceError,
+    BleCharacteristic, BleCharacteristicEvent, BleDevice, BleSession, DeviceError, DeviceId,
     MockBleCharacteristic, MockBleDevice, MockBleSession,
 };
 #[cfg(feature = "bluez")]

@@ -3,6 +3,9 @@ appenders:
     kind: console
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {h({l})} {t}: {m}{n}"
+    filters:
+      - kind: threshold
+        level: debug
 
   application:
     kind: file
@@ -14,6 +17,7 @@ appenders:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {h({l})} {t}: {m}{n}"
 
 root:
+  level: trace
   appenders:
     - stdout
     - application
@@ -22,4 +26,6 @@ loggers:
   serde_xml_rs::de:
     level: error
   sqlx::query:
+    level: error
+  btleplug:
     level: error

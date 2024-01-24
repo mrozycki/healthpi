@@ -40,7 +40,7 @@ impl ElitePlus {
                 timestamp,
                 vec![Value::Glucose(glucose as i32)],
                 event.value,
-                Source::Device(self.ble_device.mac_address()),
+                Source::Device(self.ble_device.id()),
             ),
         ))
     }

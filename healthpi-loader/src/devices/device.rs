@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-use std::str::FromStr;
 use std::{collections::HashSet, error::Error, fs::File};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Local, Utc};
-use healthpi_bt::{BleDevice, MacAddress};
+use healthpi_bt::{BleDevice, DeviceId};
 use log::{debug, info, warn};
 
 use healthpi_db::measurement::Record;
@@ -21,19 +20,19 @@ pub trait Device {
 }
 
 struct BackoffTable {
-    expiry_timestamps: HashMap<MacAddress, DateTime<Utc>>,
+    expiry_timestamps: HashMap<DeviceId, DateTime<Utc>>,
 }
 
 impl BackoffTable {
     fn new() -> Self {
         Self {
-            expiry_timestamps: HashMap::<MacAddress, DateTime<Utc>>::new(),
+            expiry_timestamps: HashMap::<DeviceId, DateTime<Utc>>::new(),
         }
     }
 
     fn check(&self, device: &dyn BleDevice) -> bool {
         self.expiry_timestamps
-            .get(&device.mac_address())
+            .get(&device.id())
             .filter(|expiry| expiry > &&chrono::Utc::now())
             .is_some()
     }
@@ -42,8 +41,7 @@ impl BackoffTable {
         let backoff_expiry = chrono::Utc::now()
             .checked_add_signed(chrono::Duration::minutes(5))
             .unwrap();
-        self.expiry_timestamps
-            .insert(device.mac_address(), backoff_expiry);
+        self.expiry_timestamps.insert(device.id(), backoff_expiry);
         backoff_expiry
     }
 }
@@ -55,13 +53,13 @@ pub trait Factory: Send + Sync {
 }
 
 pub struct FactoryImpl {
-    paired_devices: HashSet<MacAddress>,
+    paired_devices: HashSet<DeviceId>,
     backoff_table: BackoffTable,
 }
 
 impl FactoryImpl {
     #[allow(dead_code)]
-    pub fn new(paired_devices: HashSet<MacAddress>) -> Self {
+    pub fn new(paired_devices: HashSet<DeviceId>) -> Self {
         Self {
             paired_devices,
             backoff_table: BackoffTable::new(),
@@ -70,11 +68,10 @@ impl FactoryImpl {
 
     pub fn from_file(path: &str) -> std::io::Result<Self> {
         let file = File::open(path)?;
-        let paired_devices: HashSet<MacAddress> = BufReader::new(file)
+        let paired_devices: HashSet<DeviceId> = BufReader::new(file)
             .lines()
             .map_while(|l| l.ok())
-            .map(|s| MacAddress::from_str(&s))
-            .filter_map(|l| l.ok())
+            .map(DeviceId::new)
             .collect();
 
         info!("Loaded {} paired devices from file", paired_devices.len());
@@ -85,7 +82,7 @@ impl FactoryImpl {
 
 impl Factory for FactoryImpl {
     fn make_device(&self, ble_device: Box<dyn BleDevice>) -> Option<Box<dyn Device>> {
-        if !ble_device.in_range() || !self.paired_devices.contains(&ble_device.mac_address()) {
+        if !ble_device.in_range() || !self.paired_devices.contains(&ble_device.id()) {
             None
         } else if self.backoff_table.check(&*ble_device) {
             debug!(
@@ -101,8 +98,8 @@ impl Factory for FactoryImpl {
             Some(Box::new(soehnle::SystoMC400::new(ble_device)))
         } else {
             warn!(
-                "Device with MAC={} is not of any supported types",
-                ble_device.mac_address()
+                "Device with ID={} is not of any supported types",
+                ble_device.id()
             );
             None
         }

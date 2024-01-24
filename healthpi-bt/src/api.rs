@@ -4,8 +4,6 @@ use async_trait::async_trait;
 use futures::Stream;
 use uuid::Uuid;
 
-use super::macaddress::MacAddress;
-
 #[derive(Debug)]
 pub enum DeviceError {
     ConnectionFailure(String),
@@ -35,6 +33,21 @@ pub trait BleCharacteristic: Send + Sync + fmt::Debug {
     async fn read(&self) -> Result<Vec<u8>, DeviceError>;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct DeviceId(String);
+
+impl DeviceId {
+    pub fn new(device_id: String) -> Self {
+        Self(device_id)
+    }
+}
+
+impl fmt::Display for DeviceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[mockall::automock]
 #[async_trait]
 pub trait BleDevice: Send + Sync {
@@ -42,7 +55,7 @@ pub trait BleDevice: Send + Sync {
     async fn disconnect(&self) -> Result<(), DeviceError>;
 
     fn in_range(&self) -> bool;
-    fn mac_address(&self) -> MacAddress;
+    fn id(&self) -> DeviceId;
     fn name(&self) -> String;
 
     async fn get_characteristic(

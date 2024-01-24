@@ -1,5 +1,5 @@
 use chrono::NaiveDateTime;
-use healthpi_bt::MacAddress;
+use healthpi_bt::DeviceId;
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use serde::{Deserialize, Serialize};
@@ -92,7 +92,7 @@ impl TryFrom<(usize, f64)> for Value {
 
 #[derive(Clone, Debug, Hash, PartialEq, Deserialize, Serialize)]
 pub enum Source {
-    Device(MacAddress),
+    Device(DeviceId),
     Unknown(String),
 }
 

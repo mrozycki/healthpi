@@ -3,10 +3,10 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::{NaiveDateTime, Utc};
 use futures::StreamExt;
-use healthpi_bt::{BleCharacteristicEvent, BleDevice, MacAddress};
+use healthpi_bt::{BleCharacteristicEvent, BleDevice, DeviceId};
 use healthpi_db::measurement::{Record, Source, Value};
 use healthpi_db::user::User;
-use log::{debug, info};
+use log::{debug, info, trace};
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -58,8 +58,17 @@ impl Shape200 {
             timestamp,
             values,
             event.value,
-            Source::Device(self.ble_device.mac_address()),
+            Source::Device(self.ble_device.id()),
         ))
+    }
+
+    fn user_from_event(event: BleCharacteristicEvent) -> User {
+        User::new(
+            event.value[3],
+            event.value[4] != 0,
+            u16::from_be_bytes([event.value[5], event.value[6]]),
+            event.value[9],
+        )
     }
 }
 
@@ -92,25 +101,33 @@ impl Device for Shape200 {
 
         info!("Subscribing to notifications");
         let mut events = weight_characteristic.subscribe().await?;
+        // Request user information
         cmd_characteristic.write_with_response(&[0x0c, 1]).await?;
 
         info!("Reading user data");
         let user = if let Some(event) = events.next().await {
-            User::new(
-                event.value[3],
-                event.value[4] != 0,
-                u16::from_be_bytes([event.value[5], event.value[6]]),
-                event.value[9],
-            )
+            Self::user_from_event(event)
         } else {
             panic!("Did not receive user data!")
         };
+        trace!("User: {:?}", user);
 
+        // Consume remaining user data events before requesting measurement notifications.
+        // Otherwise measurement events might not come.
+        while let Ok(Some(event)) = timeout(Duration::from_secs(1), events.next()).await {
+            trace!(
+                "Additional user received: {:?}",
+                Self::user_from_event(event)
+            );
+        }
+
+        // Request measurement data for user 1.
         cmd_characteristic.write_with_response(&[0x09, 1]).await?;
 
         info!("Processing measurement notifications");
         let mut records = Vec::new();
-        while let Ok(Some(event)) = timeout(Duration::from_millis(1000), events.next()).await {
+        while let Ok(Some(event)) = timeout(Duration::from_secs(1), events.next()).await {
+            trace!("Event received: {:?}", event.value);
             if let Some(record) = self.read_record(&user, event) {
                 records.push(record);
             }
@@ -198,7 +215,7 @@ impl SystoMC400 {
         Self { ble_device }
     }
 
-    fn read_record(raw_data: Vec<u8>, mac_address: MacAddress) -> Option<Record> {
+    fn read_record(raw_data: Vec<u8>, device_id: DeviceId) -> Option<Record> {
         let mut i = 1;
 
         let mut values = Vec::new();
@@ -228,13 +245,11 @@ impl SystoMC400 {
             values.push(Value::HeartRate(heart_rate as i32));
         }
 
-        let raw_mac_address: [u8; 6] = mac_address.into();
-
         Some(Record::new(
             timestamp,
             values,
             raw_data,
-            Source::Device(raw_mac_address.into()),
+            Source::Device(device_id),
         ))
     }
 }
@@ -267,8 +282,7 @@ impl Device for SystoMC400 {
         let mut prev_timestamp = NaiveDateTime::MIN;
         let mut timestamp_duplicate_count = 0;
         while let Ok(Some(event)) = timeout(Duration::from_millis(5000), events.next()).await {
-            if let Some(mut record) = Self::read_record(event.value, self.ble_device.mac_address())
-            {
+            if let Some(mut record) = Self::read_record(event.value, self.ble_device.id()) {
                 if record.timestamp == prev_timestamp {
                     timestamp_duplicate_count += 1;
                     record.timestamp += chrono::Duration::seconds(timestamp_duplicate_count);
@@ -291,13 +305,13 @@ impl Device for SystoMC400 {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{NaiveDate, NaiveTime};
-
     use super::*;
+
+    use chrono::{NaiveDate, NaiveTime};
 
     #[test]
     fn read_record_all_fields_present() {
-        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let device_id = DeviceId::new("12:34:56:78:9A:BC".into());
         let raw_data = vec![
             30, 128, 0, 75, 0, 93, 0, 230, 7, 8, 4, 13, 49, 0, 80, 0, 0, 0, 0,
         ];
@@ -312,17 +326,17 @@ mod tests {
                 Value::HeartRate(80),
             ],
             raw_data.clone(),
-            Source::Device(mac_address),
+            Source::Device(device_id.clone()),
         );
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
+        let record = SystoMC400::read_record(raw_data.clone(), device_id).unwrap();
 
         assert_eq!(record, expected);
     }
 
     #[test]
     fn read_record_all_fields_present_kpa() {
-        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let device_id = DeviceId::new("12:34:56:78:9A:BC".into());
         // 128 mmHg = 17100 Pa = 66 * 256 + 204
         // 75 mmHg = 10000 Pa = 39 * 256 + 16
         let raw_data = vec![
@@ -339,17 +353,17 @@ mod tests {
                 Value::HeartRate(80),
             ],
             raw_data.clone(),
-            Source::Device(mac_address),
+            Source::Device(device_id.clone()),
         );
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
+        let record = SystoMC400::read_record(raw_data.clone(), device_id).unwrap();
 
         assert_eq!(record, expected);
     }
 
     #[test]
     fn read_record_without_timestamp() {
-        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let device_id = DeviceId::new("12:34:56:78:9A:BC".into());
         let raw_data = vec![28, 128, 0, 75, 0, 93, 0, 80, 0, 0, 0, 0];
         let expected_values = vec![
             Value::BloodPressureSystolic(128),
@@ -357,16 +371,16 @@ mod tests {
             Value::HeartRate(80),
         ];
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
+        let record = SystoMC400::read_record(raw_data.clone(), device_id.clone()).unwrap();
 
         assert_eq!(record.raw_data, raw_data);
-        assert_eq!(record.source, Source::Device(mac_address));
+        assert_eq!(record.source, Source::Device(device_id));
         assert_eq!(record.values, expected_values);
     }
 
     #[test]
     fn read_record_without_heart_rate() {
-        let mac_address = MacAddress::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        let device_id = DeviceId::new("12:34:56:78:9A:BC".into());
         let raw_data = vec![26, 128, 0, 75, 0, 93, 0, 230, 7, 8, 4, 13, 49, 0, 0, 0, 0];
         let expected = Record::new(
             NaiveDateTime::new(
@@ -378,10 +392,10 @@ mod tests {
                 Value::BloodPressureDiastolic(75),
             ],
             raw_data.clone(),
-            Source::Device(mac_address),
+            Source::Device(device_id.clone()),
         );
 
-        let record = SystoMC400::read_record(raw_data.clone(), mac_address).unwrap();
+        let record = SystoMC400::read_record(raw_data.clone(), device_id).unwrap();
 
         assert_eq!(record, expected);
     }

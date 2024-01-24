@@ -10,8 +10,9 @@ use futures::future;
 use futures::{lock::Mutex, Stream, StreamExt};
 use uuid::Uuid;
 
+use crate::api::DeviceId;
+
 use super::api::{BleCharacteristic, BleCharacteristicEvent, BleDevice, BleSession, DeviceError};
-use super::macaddress::MacAddress;
 
 impl From<ValueNotification> for BleCharacteristicEvent {
     fn from(value: ValueNotification) -> Self {
@@ -134,15 +135,19 @@ impl BleDevice for BleDeviceImpl {
         self.properties.rssi.is_some()
     }
 
-    fn mac_address(&self) -> MacAddress {
-        self.properties.address.into_inner().into()
+    fn id(&self) -> DeviceId {
+        if cfg!(target_os = "macos") {
+            DeviceId::new(self.peripheral.id().to_string())
+        } else {
+            DeviceId::new(self.properties.address.to_string())
+        }
     }
 
     fn name(&self) -> String {
         self.properties
             .local_name
             .clone()
-            .unwrap_or(self.mac_address().to_string())
+            .unwrap_or(self.id().to_string())
     }
 
     async fn get_characteristic(
