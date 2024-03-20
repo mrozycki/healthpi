@@ -2,7 +2,6 @@
 /result
 
 devices.csv
-.env
 
 *.db
 *.db-wal

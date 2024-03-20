@@ -21,10 +21,9 @@ jobs:
       with:
           components: clippy, rustfmt
     - name: Install dependencies
-      run: sudo apt install libdbus-1-dev pkg-config && cargo install migrant --features sqlite
+      run: sudo apt install libdbus-1-dev pkg-config && cargo install sqlx-cli
     - name: Run migration
-      working-directory: healthpi-db
-      run: migrant setup && migrant apply
+      run: sqlx database create && sqlx migrate run
     - name: Check formatting
       run: cargo fmt --check
     - name: Cache cargo dependencies
