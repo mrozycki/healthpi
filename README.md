@@ -45,30 +45,21 @@ to be done one per device.
 
 ### Database setup
 
-HealthPi uses [migrant](https://crates.io/crates/migrant) to manage database migrations.
-At this point, you need to run the migrations manually. In order to do that,
-you will have to install `migrant` cli with sqlite enabled. This also requires
-`sqlite3` to be installed.
+HealthPi uses [sqlx-cli](https://github.com/launchbadge/sqlx/blob/main/sqlx-cli/README.md) 
+to manage database migrations. At this point, you need to run the migrations manually. 
+sqlx-cli is included in the nix development shell, so you can set up the database by
+running:
 
 ```
-sudo apt install sqlite3 libsqlite3-dev
-cargo install migrant --features sqlite
+nix develop
+sqlx database create
+sqlx migrate run
 ```
 
-After that you run the migration by simply executing:
+If you do not want to use nix, you can install sqlx-cli with
 
 ```
-cd healthpi-db; migrant setup; migrant apply; cd ..
-```
-
-You will also need to point healthpi-loader to the correct database by setting
-an appropriate environment variable. The easiest way to do that is to create
-a `.env` file with a `DATABASE_URL` variable set, pointing to an sqlite database
-file. By default, `migrant` creates the database in the project root in a file
-called `healthpi.db`. We suggest specifying an absolute path, like this:
-
-```
-echo DATABASE_URL=/home/pi/healthpi/healthpi.db > .env
+cargo install sqlx-cli
 ```
 
 Local development setup

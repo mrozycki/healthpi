@@ -3,6 +3,6 @@ pkgs.mkShell {
   inputsFrom = [ (pkgs.callPackage ./default.nix { inherit rust; }) ];
 
   buildInputs = with pkgs; [
-    trunk
+    sqlx-cli
   ];
 }
