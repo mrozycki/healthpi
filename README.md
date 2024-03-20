@@ -74,6 +74,22 @@ echo DATABASE_URL=/home/pi/healthpi/healthpi.db > .env
 Local development setup
 -----------------------
 
+### Using nix
+
+#### Setup
+
+1. Install nix by following instructions at https://nixos.org/download
+2. Add the following line to /etc/nix/nix.conf:
+```nix
+experimental-features = nix-command flakes
+```
+3. (optional) Install [direnv](https://direnv.net) and [direnv VSCode extension](https://marketplace.visualstudio.com/items?itemName=mkhl.direnv).
+
+#### Workflow
+
+Use `nix develop` to enter development shell. From there you'll have access
+to any tools and dependencies needed for development.
+
 ### Git hooks
 
 This repository has git hooks prepared that check simple conditions that might
