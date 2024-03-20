@@ -351,53 +351,23 @@ dependencies = [
 
 [[package]]
 name = "bluez-async"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e81db626818b179ab5fc3393b7ac77462335f716b302ef1ff1866473ab6ddb25"
-dependencies = [
- "async-trait",
- "bitflags 1.3.2",
- "bluez-generated 0.2.1",
- "dbus",
- "dbus-tokio",
- "futures",
- "itertools",
- "log",
- "serde",
- "serde-xml-rs 0.5.1",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "bluez-async"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ce7d4413c940e8e3cb6afc122d3f4a07096aca259d286781128683fc9f39d9b"
 dependencies = [
  "async-trait",
  "bitflags 2.4.2",
- "bluez-generated 0.3.0",
+ "bluez-generated",
  "dbus",
  "dbus-tokio",
  "futures",
  "itertools",
  "log",
  "serde",
- "serde-xml-rs 0.6.0",
+ "serde-xml-rs",
  "thiserror",
  "tokio",
  "uuid",
-]
-
-[[package]]
-name = "bluez-generated"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ad8f302dd79411881cd0181f3bd9fc91a959b71c3a13159bd8a07d2c40dc7f"
-dependencies = [
- "dbus",
 ]
 
 [[package]]
@@ -438,7 +408,7 @@ checksum = "ba345f9db94939c72959b2008abe1ffcdbcaa235243fd92ad12436532ff199cf"
 dependencies = [
  "async-trait",
  "bitflags 2.4.2",
- "bluez-async 0.7.2",
+ "bluez-async",
  "cocoa",
  "dashmap",
  "dbus",
@@ -1167,7 +1137,6 @@ name = "healthpi-bt"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "bluez-async 0.6.0",
  "btleplug",
  "futures",
  "mockall",
@@ -2114,18 +2083,6 @@ checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
 dependencies = [
  "ordered-float",
  "serde",
-]
-
-[[package]]
-name = "serde-xml-rs"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65162e9059be2f6a3421ebbb4fef3e74b7d9e7c60c50a0e292c6239f19f1edfa"
-dependencies = [
- "log",
- "serde",
- "thiserror",
- "xml-rs",
 ]
 
 [[package]]
