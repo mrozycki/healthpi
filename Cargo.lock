@@ -1127,6 +1127,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "healthpi-db",
+ "healthpi-model",
  "log",
  "log4rs",
  "serde",
@@ -1139,6 +1140,7 @@ dependencies = [
  "async-trait",
  "btleplug",
  "futures",
+ "healthpi-model",
  "mockall",
  "serde",
  "uuid",
@@ -1152,6 +1154,7 @@ dependencies = [
  "chrono",
  "dotenv",
  "healthpi-bt",
+ "healthpi-model",
  "itertools",
  "log",
  "mockall",
@@ -1178,6 +1181,7 @@ dependencies = [
  "futures",
  "healthpi-bt",
  "healthpi-db",
+ "healthpi-model",
  "log",
  "log4rs",
  "mockall",
@@ -1185,6 +1189,19 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "healthpi-model"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "num",
+ "num-derive",
+ "num-traits",
+ "serde",
+ "serde_with",
+ "strum",
 ]
 
 [[package]]

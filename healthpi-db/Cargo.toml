@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 healthpi-bt = { path = "../healthpi-bt" }
+healthpi-model = { path = "../healthpi-model", features = ["serde"] }
+
 chrono = { version = "0.4.19", features = ["serde"] }
 sqlx = { version = "0.6", features = ["runtime-tokio-rustls", "sqlite"] }
 dotenv = "0.15.0"

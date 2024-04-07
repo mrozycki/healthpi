@@ -2,6 +2,7 @@ use std::{error::Error, fmt, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
+use healthpi_model::device::DeviceId;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -31,21 +32,6 @@ pub trait BleCharacteristic: Send + Sync + fmt::Debug {
     async fn write(&self, bytes: &[u8]) -> Result<(), DeviceError>;
     async fn write_with_response(&self, bytes: &[u8]) -> Result<(), DeviceError>;
     async fn read(&self) -> Result<Vec<u8>, DeviceError>;
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct DeviceId(String);
-
-impl DeviceId {
-    pub fn new(device_id: String) -> Self {
-        Self(device_id)
-    }
-}
-
-impl fmt::Display for DeviceId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
 }
 
 #[mockall::automock]

@@ -1,6 +1,6 @@
 use std::{error::Error, fs::File, io::BufReader};
 
-use healthpi_db::db::{
+use healthpi_db::{
     connection::Connection,
     measurement::{MeasurementRepository, MeasurementRepositoryImpl},
 };
