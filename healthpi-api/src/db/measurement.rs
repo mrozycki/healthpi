@@ -106,7 +106,6 @@ impl<'r> FromRow<'r, SqliteRow> for RecordRow {
     }
 }
 
-#[mockall::automock]
 #[async_trait]
 pub trait MeasurementRepository: Send + Sync {
     async fn store_records(&self, records: Vec<Record>) -> Result<(), Box<dyn Error>>;
