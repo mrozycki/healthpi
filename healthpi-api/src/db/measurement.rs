@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime};
 use healthpi_model::measurement::{Record, Source, Value, ValueType};
 use itertools::Itertools;
 use log::{debug, error};
@@ -47,7 +47,9 @@ fn record_to_new_value(val: Record) -> (NewRecord, Vec<NewValue>) {
         .collect();
     let new_record = NewRecord {
         record_ref,
-        timestamp: val.timestamp.timestamp(),
+        // Note: the timestamp is not actually in UTC or any other determinable timezone,
+        // but chrono deprecated timestamps for `NaiveDateTime`s.
+        timestamp: val.timestamp.and_utc().timestamp(),
         source: ron::to_string(&val.source).unwrap(),
     };
 
@@ -81,12 +83,14 @@ impl<'r> FromRow<'r, SqliteRow> for RecordRow {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
         let timestamp = row.try_get("timestamp")?;
         Ok(Self {
-            timestamp: NaiveDateTime::from_timestamp_opt(timestamp, 0).ok_or_else(|| {
-                sqlx::Error::ColumnDecode {
+            timestamp: DateTime::from_timestamp(timestamp, 0)
+                .ok_or_else(|| sqlx::Error::ColumnDecode {
                     index: "timestamp".into(),
                     source: Box::new(DbError::InvalidTimestamp),
-                }
-            })?,
+                })?
+                // Note: the timestamp is not actually in UTC or any other determinable timezone,
+                // but chrono deprecated timestamps for `NaiveDateTime`s.
+                .naive_utc(),
             source: ron::from_str(row.try_get("source")?).map_err(|e| {
                 sqlx::Error::ColumnDecode {
                     index: "source".into(),
