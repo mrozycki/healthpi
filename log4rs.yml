@@ -29,3 +29,7 @@ loggers:
     level: error
   btleplug:
     level: error
+  reqwest:
+    level: error
+  hyper_util:
+    level: error

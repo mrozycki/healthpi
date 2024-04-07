@@ -1,14 +1,17 @@
+mod db;
+
 use std::str::FromStr;
 
 use actix_cors::Cors;
-use actix_web::{get, web, App, HttpServer, Responder};
-use healthpi_db::{
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use healthpi_model::measurement::{Record, ValueType};
+use log::info;
+use serde::{de, Deserialize};
+
+use crate::db::{
     connection::Connection,
     measurement::{MeasurementRepository, MeasurementRepositoryImpl},
 };
-use healthpi_model::measurement::ValueType;
-use log::info;
-use serde::{de, Deserialize};
 
 fn comma_separated_value_types<'de, D>(deserializer: D) -> Result<Vec<ValueType>, D::Error>
 where
@@ -22,6 +25,7 @@ where
 
 #[derive(Debug, Deserialize)]
 struct Query {
+    #[serde(default)]
     #[serde(deserialize_with = "comma_separated_value_types")]
     select: Vec<ValueType>,
 }
@@ -39,6 +43,17 @@ async fn index(
     )
 }
 
+#[post("/")]
+async fn post_measurements(
+    measurement_repository: web::Data<MeasurementRepositoryImpl>,
+    measurements: web::Json<Vec<Record>>,
+) -> impl Responder {
+    match measurement_repository.store_records(measurements.0).await {
+        Ok(_) => HttpResponse::Created().json(()),
+        Err(_) => HttpResponse::InternalServerError().json(()),
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
@@ -53,6 +68,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(web::Data::new(measurement_repository.clone()))
             .service(index)
+            .service(post_measurements)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

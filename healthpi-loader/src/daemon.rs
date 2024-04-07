@@ -4,8 +4,6 @@ use std::sync::{
     Arc,
 };
 
-use healthpi_db::connection::Connection;
-use healthpi_db::measurement::MeasurementRepositoryImpl;
 use log::info;
 
 use healthpi_loader::devices::device::FactoryImpl;
@@ -15,9 +13,7 @@ use healthpi_loader::Loader;
 async fn main() -> Result<(), Box<dyn Error>> {
     log4rs::init_file("log4rs.yml", Default::default())?;
 
-    info!("Connecting to database");
-    let conn = Connection::establish().await?;
-    let measurement_repository = Box::new(MeasurementRepositoryImpl::new(conn.clone()));
+    let api_client = Box::new(healthpi_client::create("http://localhost:8080/".to_owned()));
 
     info!("Starting Bluetooth session");
     let ble_session = healthpi_bt::create_session().await?;
@@ -27,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let loader = Arc::new(Loader::new(
         ble_session,
         factory,
-        measurement_repository,
+        api_client,
         running.clone(),
     ));
     ctrlc::set_handler(move || running.store(false, Ordering::Relaxed))?;

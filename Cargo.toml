@@ -1,3 +1,9 @@
 [workspace]
-members = ["healthpi-api", "healthpi-bt", "healthpi-db", "healthpi-loader", "healthpi-model"]
+members = [
+    "healthpi-api",
+    "healthpi-bt",
+    "healthpi-client",
+    "healthpi-loader",
+    "healthpi-model",
+]
 resolver = "2"

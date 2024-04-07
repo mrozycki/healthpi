@@ -11,7 +11,6 @@ use std::{
 
 use futures::lock::Mutex;
 use healthpi_bt::BleSession;
-use healthpi_db::measurement::MeasurementRepository;
 use log::{debug, error, info};
 use tokio::time;
 
@@ -20,7 +19,7 @@ use crate::devices::device::Factory;
 pub struct Loader {
     ble_session: Box<dyn BleSession>,
     factory: Arc<Mutex<Box<dyn Factory>>>,
-    repository: Box<dyn MeasurementRepository>,
+    api_client: Box<dyn healthpi_client::Client>,
     running: Arc<AtomicBool>,
 }
 
@@ -28,13 +27,13 @@ impl Loader {
     pub fn new(
         ble_session: Box<dyn BleSession>,
         factory: Box<dyn Factory>,
-        repository: Box<dyn MeasurementRepository>,
+        api_client: Box<dyn healthpi_client::Client>,
         running: Arc<AtomicBool>,
     ) -> Self {
         Self {
             ble_session,
             factory: Arc::new(Mutex::new(factory)),
-            repository,
+            api_client,
             running,
         }
     }
@@ -82,7 +81,7 @@ impl Loader {
                 device.disconnect().await?;
 
                 info!("Storing records in database");
-                if let Err(e) = self.repository.store_records(records).await {
+                if let Err(e) = self.api_client.post_records(&records).await {
                     error!("Failed to store records in database, skipping. {}", e);
                     continue;
                 }

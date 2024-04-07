@@ -6,7 +6,6 @@ use std::sync::{
 use chrono::Utc;
 use futures::stream;
 use healthpi_bt::{BleCharacteristicEvent, MockBleCharacteristic, MockBleDevice, MockBleSession};
-use healthpi_db::measurement::MockMeasurementRepository;
 use healthpi_loader::{
     devices::{device::MockFactory, soehnle::Shape200},
     Loader,
@@ -67,9 +66,9 @@ async fn shape_200_returns_no_records() {
         .returning(|ble_device| Some(Box::new(Shape200::new(ble_device))));
     factory.expect_mark_processed().returning(|_| Utc::now());
 
-    let mut measurement_repository = MockMeasurementRepository::new();
+    let mut measurement_repository = healthpi_client::MockClient::new();
     measurement_repository
-        .expect_store_records()
+        .expect_post_records()
         .with(eq(vec![]))
         .returning(|_| Ok(()));
 
