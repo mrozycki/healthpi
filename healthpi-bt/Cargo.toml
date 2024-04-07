@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+healthpi-model = { path = "../healthpi-model" }
+
 async-trait = "0.1.56"
 btleplug = "0.11.5"
 futures = "0.3.21"

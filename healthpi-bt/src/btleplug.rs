@@ -8,9 +8,8 @@ use btleplug::api::{
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::future;
 use futures::{lock::Mutex, Stream, StreamExt};
+use healthpi_model::device::DeviceId;
 use uuid::Uuid;
-
-use crate::api::DeviceId;
 
 use super::api::{BleCharacteristic, BleCharacteristicEvent, BleDevice, BleSession, DeviceError};
 

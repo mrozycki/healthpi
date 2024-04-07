@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 healthpi-bt = { path = "../healthpi-bt" }
 healthpi-db = { path = "../healthpi-db" }
+healthpi-model = { path = "../healthpi-model" }
 
 async-trait = "0.1.56"
 chrono = "0.4.19"

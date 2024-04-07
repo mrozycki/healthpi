@@ -3,12 +3,10 @@ use std::str::FromStr;
 use actix_cors::Cors;
 use actix_web::{get, web, App, HttpServer, Responder};
 use healthpi_db::{
-    db::{
-        connection::Connection,
-        measurement::{MeasurementRepository, MeasurementRepositoryImpl},
-    },
-    measurement::ValueType,
+    connection::Connection,
+    measurement::{MeasurementRepository, MeasurementRepositoryImpl},
 };
+use healthpi_model::measurement::ValueType;
 use log::info;
 use serde::{de, Deserialize};
 

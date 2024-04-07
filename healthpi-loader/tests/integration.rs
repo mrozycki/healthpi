@@ -6,7 +6,7 @@ use std::sync::{
 use chrono::Utc;
 use futures::stream;
 use healthpi_bt::{BleCharacteristicEvent, MockBleCharacteristic, MockBleDevice, MockBleSession};
-use healthpi_db::db::measurement::MockMeasurementRepository;
+use healthpi_db::measurement::MockMeasurementRepository;
 use healthpi_loader::{
     devices::{device::MockFactory, soehnle::Shape200},
     Loader,

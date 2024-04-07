@@ -4,10 +4,9 @@ use std::{collections::HashSet, error::Error, fs::File};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Local, Utc};
-use healthpi_bt::{BleDevice, DeviceId};
+use healthpi_bt::BleDevice;
+use healthpi_model::{device::DeviceId, measurement::Record};
 use log::{debug, info, warn};
-
-use healthpi_db::measurement::Record;
 
 use super::{contour, soehnle};
 

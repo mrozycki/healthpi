@@ -4,8 +4,8 @@ use std::sync::{
     Arc,
 };
 
-use healthpi_db::db::connection::Connection;
-use healthpi_db::db::measurement::MeasurementRepositoryImpl;
+use healthpi_db::connection::Connection;
+use healthpi_db::measurement::MeasurementRepositoryImpl;
 use log::info;
 
 use healthpi_loader::devices::device::FactoryImpl;

@@ -11,7 +11,7 @@ use std::{
 
 use futures::lock::Mutex;
 use healthpi_bt::BleSession;
-use healthpi_db::db::measurement::MeasurementRepository;
+use healthpi_db::measurement::MeasurementRepository;
 use log::{debug, error, info};
 use tokio::time;
 

@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, error::Error, time::Duration};
 use async_trait::async_trait;
 use futures::StreamExt;
 use healthpi_bt::{BleCharacteristicEvent, BleDevice};
-use healthpi_db::measurement::{MealIndicator, Record, Source, Value};
+use healthpi_model::measurement::{MealIndicator, Record, Source, Value};
 use log::{debug, info};
 use tokio::time::timeout;
 use uuid::Uuid;
