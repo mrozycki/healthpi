@@ -14,7 +14,7 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-        rust = pkgs.rust-bin.stable."1.76.0".default.override {
+        rust = pkgs.rust-bin.stable."1.77.1".default.override {
           extensions = [ "rust-src" ];
         };
       in
