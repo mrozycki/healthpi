@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -209,11 +210,15 @@ fn get_basal_metabolic_rate(user: &User, weight: f64) -> f64 {
 
 pub struct SystoMC400 {
     ble_device: Box<dyn BleDevice>,
+    data_processed: AtomicBool,
 }
 
 impl SystoMC400 {
     pub fn new(ble_device: Box<dyn BleDevice>) -> Self {
-        Self { ble_device }
+        Self {
+            ble_device,
+            data_processed: AtomicBool::new(false),
+        }
     }
 
     fn read_record(raw_data: Vec<u8>, device_id: DeviceId) -> Option<Record> {
@@ -263,7 +268,14 @@ impl Device for SystoMC400 {
     }
 
     async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.ble_device.disconnect().await?;
+        // This device turns off after sending all notifications,
+        // so if data has been already processed, disconnecting will fail.
+        if !self.data_processed.load(Ordering::SeqCst) {
+            debug!("Data has not been processed yet, so the device is on; disconnecting");
+            self.ble_device.disconnect().await?;
+        } else {
+            debug!("Data has processed already, skipping disconnect");
+        }
         Ok(())
     }
 
@@ -295,6 +307,7 @@ impl Device for SystoMC400 {
             }
         }
         debug!("Processed all events, produced {} records", records.len());
+        self.data_processed.store(true, Ordering::SeqCst);
 
         Ok(records)
     }

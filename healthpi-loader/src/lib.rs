@@ -11,7 +11,7 @@ use std::{
 
 use futures::lock::Mutex;
 use healthpi_bt::BleSession;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use tokio::time;
 
 use crate::devices::device::Factory;
@@ -56,9 +56,16 @@ impl Loader {
                     "Found device {}, connecting",
                     device.get_ble_device().name()
                 );
-                if let Err(e) = device.connect().await {
-                    error!("Failed to connect, skipping: {:?}", e);
-                    continue;
+                match tokio::time::timeout(Duration::from_secs(5), device.connect()).await {
+                    Err(_) => {
+                        error!("Failed to connect within 5 seconds, skipping");
+                        continue;
+                    }
+                    Ok(Err(e)) => {
+                        error!("Failed to connect, skipping: {:?}", e);
+                        continue;
+                    }
+                    _ => {}
                 }
 
                 info!("Getting data");
@@ -78,7 +85,15 @@ impl Loader {
                     .for_each(|record| debug!("{:?}", record));
 
                 info!("Disconnecting");
-                device.disconnect().await?;
+                match tokio::time::timeout(Duration::from_secs(5), device.disconnect()).await {
+                    Err(_) => {
+                        warn!("Failed to disconnect within 5 seconds");
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Failed to disconnect: {:?}", e);
+                    }
+                    _ => {}
+                }
 
                 info!("Storing records in database");
                 if let Err(e) = self.api_client.post_records(&records).await {
