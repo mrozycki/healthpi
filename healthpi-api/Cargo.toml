@@ -17,5 +17,5 @@ log4rs = "1.2.0"
 ron = "0.8.0"
 rustc-hash = "1.1.0"
 serde = { version = "1.0.152", features = ["derive"] }
-sqlx = { version = "0.7.4", features = ["runtime-tokio-rustls", "sqlite"] }
+sqlx = { version = "0.8.2", features = ["runtime-tokio-rustls", "sqlite"] }
 tokio = "1.24.2"
