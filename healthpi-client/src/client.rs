@@ -4,8 +4,14 @@ use itertools::Itertools;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("failed to communicate with the server")]
-    ServerError,
+    #[error("server unreachable")]
+    CommunicationError,
+    #[error("internal server error")]
+    InternalServerError,
+    #[error("invalid request")]
+    RequestError,
+    #[error("incorrect server response")]
+    ResponseError,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -43,10 +49,19 @@ impl Client for ClientImpl {
             .get(&self.url)
             .send()
             .await
-            .map_err(|_| Error::ServerError)?
+            .map_err(|_| Error::CommunicationError)
+            .and_then(|resp| {
+                if resp.status().is_client_error() {
+                    Err(Error::RequestError)
+                } else if resp.status().is_server_error() {
+                    Err(Error::InternalServerError)
+                } else {
+                    Ok(resp)
+                }
+            })?
             .json()
             .await
-            .map_err(|_| Error::ServerError)
+            .map_err(|_| Error::ResponseError)
     }
 
     async fn get_records_with_value_types(&self, types: &[ValueType]) -> Result<Vec<Record>> {
@@ -58,10 +73,19 @@ impl Client for ClientImpl {
             ])
             .send()
             .await
-            .map_err(|_| Error::ServerError)?
+            .map_err(|_| Error::CommunicationError)
+            .and_then(|resp| {
+                if resp.status().is_client_error() {
+                    Err(Error::RequestError)
+                } else if resp.status().is_server_error() {
+                    Err(Error::InternalServerError)
+                } else {
+                    Ok(resp)
+                }
+            })?
             .json()
             .await
-            .map_err(|_| Error::ServerError)
+            .map_err(|_| Error::ResponseError)
     }
 
     async fn post_records(&self, records: &[Record]) -> Result<()> {
@@ -70,9 +94,18 @@ impl Client for ClientImpl {
             .json(&records)
             .send()
             .await
-            .map_err(|_| Error::ServerError)?
+            .map_err(|_| Error::CommunicationError)
+            .and_then(|resp| {
+                if resp.status().is_client_error() {
+                    Err(Error::RequestError)
+                } else if resp.status().is_server_error() {
+                    Err(Error::InternalServerError)
+                } else {
+                    Ok(resp)
+                }
+            })?
             .json()
             .await
-            .map_err(|_| Error::ServerError)
+            .map_err(|_| Error::ResponseError)
     }
 }
