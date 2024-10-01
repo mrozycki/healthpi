@@ -5,7 +5,7 @@ use std::str::FromStr;
 use actix_cors::Cors;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use healthpi_model::measurement::{Record, ValueType};
-use log::info;
+use log::{error, info};
 use serde::{de, Deserialize};
 
 use crate::db::{
@@ -49,8 +49,14 @@ async fn post_measurements(
     measurements: web::Json<Vec<Record>>,
 ) -> impl Responder {
     match measurement_repository.store_records(measurements.0).await {
-        Ok(_) => HttpResponse::Created().json(()),
-        Err(_) => HttpResponse::InternalServerError().json(()),
+        Ok(_) => {
+            info!("Successfully stored records");
+            HttpResponse::Created().json(())
+        }
+        Err(e) => {
+            error!("Failed to store records: {e}");
+            HttpResponse::InternalServerError().json(())
+        }
     }
 }
 

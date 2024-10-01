@@ -97,7 +97,7 @@ impl Loader {
 
                 info!("Storing records in database");
                 if let Err(e) = self.api_client.post_records(&records).await {
-                    error!("Failed to store records in database, skipping. {}", e);
+                    error!("Failed to store records in database, skipping: {}", e);
                     continue;
                 }
 
